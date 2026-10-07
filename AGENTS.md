@@ -25,8 +25,22 @@ without manual repainting.
 - Rejected approaches (do NOT reintroduce): per-tick/per-N-tick sweeps,
   `os.clock` throttles, revision caches for sweeps, `guiUpdate` polling.
 
-## API ground truth (verified against the installed game, build ~40408)
+## GUI hook rules (assignment-time trigger, still zero ticks)
 
+- The engine has no assign/buy/color-change event, so assignment-time
+  reaction lives in the GUI state: `gui/hook.script.lua` wraps
+  `api.cmd` factories (`^make.+Cmd$`, records kind+args per command
+  object) and `sendCommand` — technique copied from TPF3MP `guard.lua`.
+- Commands are NEVER blocked/altered, only observed. Follow-ups fire
+  ONLY from a success callback; callback-less commands pass through
+  (arrival fallback covers them).
+- Loop safety by construction: follow-ups are sent WITHOUT callback and
+  callback-less commands pass through, so they can never re-enter.
+- Install once (module-load/first-recipe guard); recipe renders nothing.
+- Pure decision logic lives in `gui/watch.lua` (`extractTargets`) and
+  MUST stay headless-testable like `sync.lua`.
+
+## API ground truth (verified against the installed game, build ~40408)
 - Game script wiring: `content/*/*.gs.lua` descriptor with
   `updateScript` / `handleEventScript` pointing at
   `<name>.script@<fn>`; signatures `update(userParams, state, dt)` and
@@ -52,6 +66,10 @@ without manual repainting.
 - Manual vehicle colors are overwritten: line color always wins
   (enforced at the next event, manual `setColor` commands are never
   fought synchronously).
+- Trigger must be assignment/purchase-time, NOT arrival: the correct
+  color has to be visible immediately after buy+assign (also the only
+  way to test it). Arrival recolor stays as fallback for script-driven
+  and multiplayer-propagated changes.
 - Tests: plain `lua tests/run.lua`, mocked `api`, zero dependencies.
 - modId: `alltherest_auto_vehicle_color`.
 

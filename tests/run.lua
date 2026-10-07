@@ -3,6 +3,7 @@
 -- Mocks api.engine / api.cmd with plain tables.
 
 local sync = dofile("content/auto_vehicle_color/sync.lua")
+local watch = dofile("content/auto_vehicle_color/gui/watch.lua")
 
 local passed, failed = 0, 0
 local function check(name, cond)
@@ -136,6 +137,38 @@ do
     and sync.sameColor(C(1, 0, 0), { 1, 0, 0 }) == true
     and sync.sameColor({ 1, 0, 0 }, C(0, 0, 1)) == false
     and sync.sameColor(nil, C(0, 0, 0)) == false)
+end
+
+-- watch.lua: command -> recolor targets (GUI hook decision logic)
+do
+  local t = watch.extractTargets("makeVehicleSetLineCmd", { [1] = 100, [2] = 10, [3] = 0, n = 3 }, {})
+  check("watch setLine", #t == 1 and t[1].vehicle == 100 and t[1].line == 10)
+
+  t = watch.extractTargets("makeVehicleReplaceCmd", { [1] = 100, n = 2 }, { vehicleEntity = 200 })
+  check("watch replace prefers result", #t == 1 and t[1].vehicle == 200 and t[1].line == nil)
+  t = watch.extractTargets("makeVehicleReplaceCmd", { [1] = 100, n = 2 }, {})
+  check("watch replace falls back to args", #t == 1 and t[1].vehicle == 100)
+
+  t = watch.extractTargets("makeVehicleBuyCmd", { n = 3 }, { resultVehicleEntity = 300 })
+  check("watch buy", #t == 1 and t[1].vehicle == 300 and t[1].line == nil)
+  t = watch.extractTargets("makeVehicleBuyCmd", { n = 3 }, {})
+  check("watch buy without result", #watch.extractTargets("makeVehicleBuyCmd", { n = 3 }, {}) == 0)
+
+  t = watch.extractTargets("makeLineUpdateCmd", { [1] = 10, n = 2 }, {})
+  check("watch lineUpdate", #t == 1 and t[1].lineVehiclesOf == 10)
+
+  check("watch lineCreate is no-op", #watch.extractTargets("makeLineCreateCmd", { n = 4 }, {}) == 0)
+
+  t = watch.extractTargets("makeEntitySetColorCmd", { [1] = 10, n = 2 }, {})
+  check("watch setColor defers to executor", #t == 1 and t[1].maybeLine == 10)
+
+  check("watch unknown kind", #watch.extractTargets("makeTownCreateCmd", { n = 1 }, {}) == 0)
+  check("watch nil-safe", #watch.extractTargets(nil, nil, nil) == 0)
+
+  check("watch WATCHED set", watch.WATCHED.makeVehicleSetLineCmd == true
+    and watch.WATCHED.makeLineUpdateCmd == true
+    and watch.WATCHED.makeEntitySetColorCmd == true
+    and (watch.WATCHED.makeTownCreateCmd or false) == false)
 end
 
 print(string.format("--- %d passed, %d failed ---", passed, failed))

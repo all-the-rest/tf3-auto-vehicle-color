@@ -11,23 +11,25 @@ at their next arrival event — no manual repainting, no polling.
 
 ## How it works (strictly event-driven, see AGENTS.md Rule 0)
 
+Two triggers, zero polling:
+
+1. **Assignment-time (GUI hook)** — `gui/hook.script.lua` wraps
+   `api.cmd` factories + `sendCommand` (technique copied from TPF3MP's
+   `guard.lua`). When `makeVehicleSetLineCmd`, `makeVehicleReplaceCmd`,
+   `makeVehicleBuyCmd`, `makeLineUpdateCmd` or a line-targeted
+   `makeEntitySetColorCmd` commits successfully, the affected
+   vehicle(s) are recolored immediately — visible right after buy+assign.
+   Commands are never blocked, only observed; without a success callback
+   nothing happens (arrival fallback covers it).
+2. **Arrival fallback (engine script)** — `TransportVehicleSystem` /
+   `OnArriveAtStop` (+ cargo events) recolor one vehicle via `syncOne`.
+   Covers script-driven and multiplayer-propagated changes.
+
 `update()` only subscribes to engine events (base-game pattern). All
-logic runs in `handleEvent`:
+follow-ups read current engine state and act only on color mismatch.
 
-- `TransportVehicleSystem` / `OnArriveAtStop` — param carries
-  `vehicleEntity` + `lineEntity` (same shape the vanilla achievements
-  script consumes). The vehicle is recolored to its line color via
-  `api.cmd.makeEntitySetColorCmd` — the exact call the vanilla vehicle
-  window uses. Sending commands from `handleEvent` is vanilla-sanctioned
-  (cf. `loan.script.tl`: `Obtain`/`Repay` → `sendCommand` with callback).
-- `OnCargoLoaded` / `OnCargoUnloaded` — same single-vehicle path,
-  duck-typed.
-
-Why this converges without polling: an assigned vehicle drives to its
-first stop → event → recolor. A line color change reaches every active
-vehicle at its next stop. There is NO engine event for "vehicle
-assigned" or "line color changed" (verified: 0 hits in 1443 base-game
-script files), so arrival events are the canonical trigger.
+Why this shape: there is NO engine event for "vehicle assigned" or
+"line color changed" (verified: 0 hits in 1443 base-game script files).
 
 ## Layout (TF3 mod format)
 
@@ -38,6 +40,9 @@ _metadata/modinfo.json                              browser name/description
 content/auto_vehicle_color/sync.lua                 pure logic (testable)
 content/auto_vehicle_color/auto_vehicle_color.gs.lua      game script wiring
 content/auto_vehicle_color/auto_vehicle_color.script.lua engine entry point
+content/auto_vehicle_color/gui/hook.res.lua             react-plugin descriptor
+content/auto_vehicle_color/gui/hook.script.lua          sendCommand wrapper (observe-only)
+content/auto_vehicle_color/gui/watch.lua                command -> targets (testable)
 tests/run.lua                                       headless unit tests
 ```
 
@@ -47,21 +52,23 @@ tests/run.lua                                       headless unit tests
 lua tests/run.lua
 ```
 
-Pure logic + mocked `api.engine` / `api.cmd`. 10 cases: recolor,
+Pure logic + mocked `api.engine` / `api.cmd`. 21 cases: recolor,
 match-skip, depot-skip, foreign-line-skip, nil-safety, error survival,
 event gating (incl. rejecting invented `line.changed` /
-`api.cmd.SetLine` names), event duck-typing, helpers.
+`api.cmd.SetLine` names), event duck-typing, command→target mapping,
+helpers.
 
 ## In-game verification (still needed)
 
-`TransportVehicle.depot` nil/-1 convention and the arrival-event flow
-are best-effort from docs + third-party mods and **not yet measured in
-the live game**. To verify:
+Unverified in the live game and marked as such:
 
 1. Install the mod folder as a TF3 mod, start a save.
-2. Assign a bus to a colored line → recolored at its first stop.
-3. Change the line color → vehicles follow at their next stops.
-4. Open the console (`debugPrint`) if behavior differs.
+2. Buy + assign a vehicle → correct line color immediately.
+3. Change the line color → vehicles follow immediately.
+4. Arrival fallback: script-driven changes converge at next stop.
+5. Open the console (`debugPrint`) if behavior differs; likely suspects:
+   `TransportVehicle.depot` convention, factory-wrap visibility of
+   command objects, plugin load order vs. other GUI mods.
 
 ## Sources
 
