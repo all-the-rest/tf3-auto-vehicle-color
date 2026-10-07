@@ -37,7 +37,10 @@ function data()
   local function executeTargets(targets)
     local sync = loadModule("sync.lua")
     local ctx = context()
-    if not sync or not ctx then return 0 end
+    if not sync or not ctx then
+      log("executeTargets: missing sync or component types")
+      return 0
+    end
     local recolored = 0
     local function recolor(vehicle, line)
       local ok, n = pcall(sync.syncOne, ctx, vehicle, line)
@@ -127,11 +130,16 @@ function data()
       callback = function(result, success, ...)
         if success then
           log("committed: ", kind)
-          local targets = watch.extractTargets(kind, args, result)
-          if #targets > 0 then
-            -- Follow-ups read CURRENT engine state and act only on
-            -- mismatch (syncOne), so a failed premise self-corrects.
-            pcall(executeTargets, targets)
+          local okT, targets = pcall(watch.extractTargets, kind, args, result)
+          if not okT then
+            log("extractTargets error: ", tostring(targets))
+          elseif #targets == 0 then
+            log("no targets for ", kind)
+          else
+            local okE, err = pcall(executeTargets, targets)
+            if not okE then
+              log("executeTargets error: ", tostring(err))
+            end
           end
         else
           log("failed (ignored): ", kind)
