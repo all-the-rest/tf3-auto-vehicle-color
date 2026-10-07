@@ -63,11 +63,11 @@ helpers.
 Install (symlinked, no copy step — repo edits apply after game restart):
 
 ```sh
-ln -s ~/dev/tf3-auto-vehicle-color "/Users/florianreisinger/Library/Application Support/Steam/steamapps/common/Transport Fever 3/mods/alltherest_auto_vehicle_color"
+ln -s ~/dev/tf3-auto-vehicle-color "<TF3-mods>/alltherest_auto_vehicle_color"
 ```
 
-Then: enable debug mode (`debugMode = true` in
-`Steam/userdata/84701780/3493540/local/settings.lua`, or game settings →
+Then: enable debug mode (`debugMode = true` in the game's `settings.lua`
+(`Steam/userdata/<steamid>/<appid>/local/`), or game settings →
 advanced), activate the mod for a save, open the console with `^`/`§`/`
 (below ESC) — it mirrors `stdout.txt` and runs Lua one-liners.
 
