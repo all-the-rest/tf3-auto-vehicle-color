@@ -46,7 +46,11 @@ function data()
       -- Our GUI hook's scripting event: { vehicle=, line= } or { line= }
       -- or { entity= }. Reads happen HERE (engine state), never in GUI.
       if id == "alltherest_auto_vehicle_color" and type(param) == "table" then
+        log("hook event: ", name)
         if param.vehicle ~= nil and param.line ~= nil then
+          local okTv, tv = pcall(api.engine.getComponent, param.vehicle, CT.TransportVehicle)
+          log("decision: tvLine=", okTv and tv and tv.line or "n/a",
+            " depot=", okTv and tv and tostring(tv.depot) or "n/a")
           local ok, n = pcall(sync.syncOne, ctx, param.vehicle, param.line)
           if ok and n == 1 then
             log("recolored vehicle ", param.vehicle, " to line ", param.line, " (hook)")
