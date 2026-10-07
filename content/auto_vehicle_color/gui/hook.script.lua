@@ -93,9 +93,13 @@ function data()
     local calls = {} -- command object -> factory args {n=...}
 
     -- Wrap factories to record kind + args per command object.
-    local wrapped = 0
+    local wrapped, total, samples = 0, 0, {}
     for name, factory in pairs(cmd) do
-      if type(name) == "string" and name:match("^make.+Cmd$") and type(factory) == "function" then
+      total = total + 1
+      if #samples < 12 then
+        samples[#samples + 1] = tostring(name) .. ":" .. type(factory)
+      end
+      if type(name) == "string" and name:match("^make.+Cmd$") then
         local orig = factory
         cmd[name] = function(...)
           local made = orig(...)
@@ -137,7 +141,10 @@ function data()
       return origSend(command, callback, ...)
     end
 
-    log("hook installed (", wrapped, " factories wrapped)")
+    log("hook installed (", wrapped, " factories wrapped, ", total, " api.cmd entries)")
+    if total > 0 then
+      log("api.cmd sample: ", table.concat(samples, ", "))
+    end
     return true
   end
 
