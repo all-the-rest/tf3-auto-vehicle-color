@@ -6,7 +6,7 @@
     "params": null,
     "postRunScript": { "fileName": "" },
     "preRunScript": { "fileName": "" },
-    "revision": 9,
+    "revision": 1,
     "runScript": { "fileName": "" },
     "severityAdd": "None",
     "severityRemove": "None"
