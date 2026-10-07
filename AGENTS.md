@@ -148,10 +148,9 @@ without manual repainting.
   ONE-TIME initial correction at session start repaints the existing
   vehicles; after that only GUI-observed actions recolor. Reason: commands
   are illegal during engine events (fatal assertion + stutter).
-- Reverse rule (user, 2026-10-07, pending test of forward direction):
-  if ALL vehicles on a line share one color, adopt it as the line
-  color (vehicles -> line). Unanimity required; mixed colors change
-  nothing.
+- Reverse rule (vehicles -> line): REJECTED (user, 2026-10-07). See the
+  "Verworfen" section — it cannot be triggered while the forward rule
+  holds.
 - Tests: plain `lua tests/run.lua`, mocked `api`, zero dependencies.
 - NO SILENT NO-OPS: every path that does nothing returns a reason
   (`syncOne` -> `0, "already-line-color" | "not-on-this-line" |
@@ -161,6 +160,25 @@ without manual repainting.
   bugs (missing event subscription, camelCase ComponentType keys) stayed
   invisible for hours precisely because a no-op looked like success.
 - modId: `alltherest_auto_vehicle_color`.
+
+## Verworfen — nicht wieder einführen
+
+- **Umgekehrte Regel** (alle Fahrzeuge einer Linie haben eine Farbe →
+  Linienfarbe übernehmen), user-Entscheid 2026-10-07. Begründung: sie
+  widerspricht der geltenden Regel „Linienfarbe gewinnt immer" — manuell
+  gefärbte Fahrzeuge werden sofort überschrieben, Unanimität ist vom
+  Spieler also nie herstellbar und die Regel hätte keinen Auslöser.
+- **Ankunfts-Fallback** (recolor aus `OnArriveAtStop`/Cargo-Events):
+  Commands sind während Engine-Events verboten (Fatal-Assertion +
+  Stutter). Ersetzt durch die Einmal-Korrektur beim Session-Start.
+- **Polling-Ansätze**: Tick-/N-Tick-Sweeps, `os.clock`-Throttles,
+  Revision-Caches für Sweeps, `guiUpdate`-Polling (Rule 0).
+- **Engine-Reads im GUI-Hook**: Der frühere Fehlschlag war der
+  camelCase-Key, nicht der GUI-State. Die Bridge über Scripting-Events ist
+  bewiesen — nicht ohne gemessenen Grund umbauen.
+- **Erfundene APIs**: `game.interface.*`, `api.cmd.make.*`, Event-Namen
+  `line.changed` / `api.cmd.SetLine` (in TF3 nicht vorhanden, 0 Treffer in
+  1443 Basis-Script-Dateien).
 
 ## Workflow
 

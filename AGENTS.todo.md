@@ -23,10 +23,7 @@ dort, damit der nächste Agent den alten Stand nicht für gültig hält).
 
 ## Offen
 
-- [ ] Umgekehrte Regel (alle Fahrzeuge einer Linie haben eine Farbe →
-      Linienfarbe übernehmen). Konflikt mit „Linienfarbe gewinnt immer":
-      manuell gefärbte Fahrzeuge werden sofort überschrieben, Unanimität
-      ist so nicht herstellbar. Entscheidung des Users offen.
+- (nichts)
 
 ## Verworfen
 
@@ -40,3 +37,7 @@ dort, damit der nächste Agent den alten Stand nicht für gültig hält).
   Scripting-Event ist bewiesen — nicht ohne Grund umbauen.
 - **Erfundene APIs**: `game.interface.*`, `api.cmd.make.*`, Event-Namen
   `line.changed` / `api.cmd.SetLine` (in TF3 nicht vorhanden, 0 Treffer).
+- **Umgekehrte Regel** (unanimous Fahrzeugfarbe → Linienfarbe),
+  user-Entscheid 2026-10-07: widerspricht „Linienfarbe gewinnt immer".
+  Manuelles Färben wird sofort überschrieben, also kann der Spieler nie
+  Unanimität herstellen — die Regel hätte keinen Auslöser.
