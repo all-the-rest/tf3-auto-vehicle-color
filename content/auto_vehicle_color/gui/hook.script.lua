@@ -43,6 +43,14 @@ function data()
     end
     local recolored = 0
     local function recolor(vehicle, line)
+      local okTv, tv = pcall(api.engine.getComponent, vehicle, ctx.componentType.TransportVehicle)
+      local okLc, lc = pcall(api.engine.getComponent, line, ctx.componentType.Color)
+      local okVc, vc = pcall(api.engine.getComponent, vehicle, ctx.componentType.Color)
+      log("recolor? vehicle=", vehicle, " targetLine=", line,
+        " tvLine=", okTv and tv and tv.line or "n/a",
+        " depot=", okTv and tv and tostring(tv.depot) or "n/a",
+        " lineColor=", okLc and lc and lc.color and "yes" or "no",
+        " vehColor=", okVc and vc and vc.color and "yes" or "no")
       local ok, n = pcall(sync.syncOne, ctx, vehicle, line)
       if ok and n == 1 then
         recolored = recolored + 1
