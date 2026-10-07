@@ -34,6 +34,25 @@ function data()
     return nil
   end
 
+  local probed = false
+  local function probeComponentTypes()
+    if probed then return end
+    probed = true
+    local function keysOf(t, n)
+      if type(t) ~= "table" then return "type=" .. type(t) end
+      local ks = {}
+      local c = 0
+      for k, v in pairs(t) do
+        c = c + 1
+        if #ks < 15 then ks[#ks + 1] = tostring(k) .. "=" .. type(v) end
+      end
+      return n .. " keys(" .. c .. "): " .. table.concat(ks, ", ")
+    end
+    log(keysOf(api and api.type and api.type.ComponentType, "api.type.ComponentType"))
+    log(keysOf(Engine and Engine.ComponentType, "Engine.ComponentType"))
+    log(keysOf(api and api.engine and api.engine.ComponentType, "api.engine.ComponentType"))
+  end
+
       local function executeTargets(targets)    local sync = loadModule("sync.lua")
     local ctx = context()
     if not sync or not ctx then
@@ -175,6 +194,7 @@ function data()
         log("prepare: no api.cmd, hook NOT installed")
         return
       end
+      pcall(probeComponentTypes)
       local ok, done = pcall(install, api.cmd)
       if not (ok and done) then
         log("prepare: install failed")
