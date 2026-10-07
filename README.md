@@ -28,6 +28,9 @@ Two triggers, zero polling:
    Covers script-driven and multiplayer-propagated changes.
 
 Both paths read current engine state and act only on a color mismatch.
+A vehicle that has never been painted has no `COLOR` component yet, so it
+is painted once (`recolored-first-time`) — that command creates the
+component, exactly like the vanilla paint bucket.
 Every no-op logs its reason (`syncOne -> 0 (already-line-color)`,
 `syncLine -> 0/7 (not-on-this-line=7)`), so nothing fails silently.
 
@@ -61,7 +64,7 @@ tools/avc_log.sh                                    dump the mod's game-log line
 lua tests/run.lua
 ```
 
-Pure logic + mocked `api.engine` / `api.cmd`. 52 cases: recolor,
+Pure logic + mocked `api.engine` / `api.cmd`. 53 cases: recolor,
 match-skip, depot-skip, foreign-line-skip, nil-safety, error survival,
 event gating (incl. rejecting invented `line.changed` /
 `api.cmd.SetLine` names), event duck-typing, command→target mapping,

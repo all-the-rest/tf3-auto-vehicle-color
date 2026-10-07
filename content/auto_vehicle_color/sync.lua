@@ -112,14 +112,21 @@ function M.syncOne(context, vehicleEntity, lineEntity)
   local okVeh, vehComp = pcall(api.engine.getComponent, vehicleEntity, CT.COLOR)
   if not okVeh then return 0, "vehicle-color-read-failed" end
   local vehColor = okVeh and vehComp and vehComp.color or nil
-  if not vehColor then return 0, "vehicle-has-no-color" end
-  if sameColor(vehColor, lineColor) then return 0, "already-line-color" end
+  if vehColor and sameColor(vehColor, lineColor) then return 0, "already-line-color" end
+
+  -- vehColor == nil means the entity has NO Color component yet (never
+  -- painted): the model still shows its default paint, so sending the line
+  -- color is exactly right — makeEntitySetColorCmd is the same call the
+  -- vanilla paint bucket makes (vehicle_eow.script.tl) and it is what
+  -- creates the component. Requiring a pre-existing color here was the
+  -- third silent bug: every vehicle reported "vehicle-has-no-color".
+  local reason = vehColor and "recolored" or "recolored-first-time"
 
   local okCmd = pcall(function()
     api.cmd.sendCommand(api.cmd.makeEntitySetColorCmd(vehicleEntity, lineColor))
   end)
   if not okCmd then return 0, "command-failed" end
-  return 1, "recolored"
+  return 1, reason
 end
 
 --- Compact "reason=count" summary, deterministic order.

@@ -62,7 +62,13 @@ function data()
           if not ok then
             log("syncOne error: ", tostring(n))
           elseif n == 1 then
-            log("recolored vehicle ", param.vehicle, " to line ", param.line, " (hook)")
+            -- DIAGNOSTIC readback: does the vehicle actually carry the line
+            -- color after the command (i.e. did the game create the Color
+            -- component)? readback=nil would mean the command is ignored.
+            local okA, after = pcall(api.engine.getComponent, param.vehicle, CT.COLOR)
+            local ax = okA and after and after.color and after.color.x or nil
+            log("recolored vehicle ", param.vehicle, " to line ", param.line, " (hook)",
+              " [", reason, "] readback=", tostring(ax))
           else
             log("syncOne -> 0 (", reason, ")")
           end

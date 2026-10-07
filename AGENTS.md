@@ -83,7 +83,21 @@ without manual repainting.
   missing member name instead of nil values.
 - Recolor: `api.cmd.sendCommand(api.cmd.makeEntitySetColorCmd(entity,
   color))` — same call the vanilla vehicle window uses
-  (`vehicle_eow.script.tl`). No callback needed.
+  (`gui/entity_window/vehicle/vehicle_eow.script.tl`). No callback needed.
+- A VEHICLE ENTITY OFTEN HAS NO `COLOR` COMPONENT YET:
+  `getComponent(vehicle, COLOR)` returns nil (no error) until the vehicle
+  has been painted once; that command is what creates the component.
+  Requiring a pre-existing vehicle color before painting was the third
+  silent bug (`vehicle-has-no-color` for all 27 vehicles of a line).
+  Paint first, then compare. Line entities, by contrast, always carry a
+  `COLOR` component.
+- Vanilla disables the paint bucket when the model has no color mask
+  (`vehicle.tv.noCblendMask == false`): unpaintable models exist, and
+  `makeEntitySetColorCmd` may be a no-op for them.
+- The game has a render-time line-color pass for vehicles
+  (`api.type.LayerConfig.ColorPassFn.LineVehicleColor`, used by HUD,
+  statistics and highlight layers). It is a *display* color pass, not a
+  persistent vehicle paint — do not mistake it for the recolor API.
 - TPF2 APIs do NOT exist in TF3: `game.interface.*` (0 hits),
   `api.cmd.make.*` factory namespace (TF3 uses `make*Cmd`), bare
   `handleEvent(src, id, name, param)` in `data()`.
@@ -113,8 +127,9 @@ without manual repainting.
 - Tests: plain `lua tests/run.lua`, mocked `api`, zero dependencies.
 - NO SILENT NO-OPS: every path that does nothing returns a reason
   (`syncOne` -> `0, "already-line-color" | "not-on-this-line" |
-  "vehicle-has-no-color" | "line-read-failed" …`, `syncLine` ->
-  `0, "reason=count …", total`) and the engine script logs it. Two real
+  "line-read-failed" …`, `1, "recolored-first-time"` for a first paint,
+  `syncLine` -> `0, "reason=count …", total`) and the engine script logs
+  it. Two real
   bugs (missing event subscription, camelCase ComponentType keys) stayed
   invisible for hours precisely because a no-op looked like success.
 - modId: `alltherest_auto_vehicle_color`.

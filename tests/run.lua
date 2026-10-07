@@ -141,8 +141,15 @@ do
   local n4, r4 = reasonOf({ lineColor = { [10] = red }, tv = { [100] = { line = 11 } } }, 100, 10)
   check("reason: foreign line", n4 == 0 and r4 == "not-on-this-line")
 
+  -- No Color component yet = never painted: send anyway (that is what
+  -- creates the component) and say so.
   local n5, r5 = reasonOf({ lineColor = { [10] = red }, tv = { [100] = { line = 10 } } }, 100, 10)
-  check("reason: vehicle has no color component", n5 == 0 and r5 == "vehicle-has-no-color")
+  check("first paint happens without a color component", n5 == 1 and r5 == "recolored-first-time")
+
+  local ctxFirst = mock({ lineColor = { [10] = red }, tv = { [100] = { line = 10 } } })
+  sync.syncOne(ctxFirst, 100, 10)
+  check("first paint sends the line color", #ctxFirst.sent == 1
+    and ctxFirst.sent[1].color == red and ctxFirst.sent[1].entity == 100)
 
   local n6, r6 = reasonOf({
     lineColor = { [10] = red }, tv = { [100] = { line = 10 } }, vehColor = { [100] = red },
