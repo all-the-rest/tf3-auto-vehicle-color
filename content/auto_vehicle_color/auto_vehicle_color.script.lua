@@ -40,6 +40,30 @@ function data()
     handleEvent = function(_params, _state, _src, id, name, param)
       local sync = loadSync()
       if not sync then return end
+      local CT = componentTypes()
+      if not CT then return end
+      local ctx = { api = api, componentType = CT }
+      -- Our GUI hook's scripting event: { vehicle=, line= } or { line= }
+      -- or { entity= }. Reads happen HERE (engine state), never in GUI.
+      if id == "alltherest_auto_vehicle_color" and type(param) == "table" then
+        if param.vehicle ~= nil and param.line ~= nil then
+          local ok, n = pcall(sync.syncOne, ctx, param.vehicle, param.line)
+          if ok and n == 1 then
+            log("recolored vehicle ", param.vehicle, " to line ", param.line, " (hook)")
+          end
+        elseif param.line ~= nil then
+          local ok, n = pcall(sync.syncLine, ctx, param.line)
+          if ok and n > 0 then
+            log("recolored ", n, " vehicles to line ", param.line, " (hook)")
+          end
+        elseif param.entity ~= nil then
+          local ok, n = pcall(sync.syncEntity, ctx, param.entity)
+          if ok and n > 0 then
+            log("recolored ", n, " via entity ", param.entity, " (hook)")
+          end
+        end
+        return
+      end
       if not sync.shouldHandleEvent(id, name) then
         -- Unknown event: still try duck-typing, harmless if it yields nil.
         local v, l = sync.extractVehicleLine(param)
@@ -47,12 +71,9 @@ function data()
       end
       local vehicle, line = sync.extractVehicleLine(param)
       if vehicle and line then
-        local CT = componentTypes()
-        if CT then
-          local ok, n = pcall(sync.syncOne, { api = api, componentType = CT }, vehicle, line)
-          if ok and n == 1 then
-            log("recolored vehicle ", vehicle, " to line ", line, " (event ", name, ")")
-          end
+        local ok, n = pcall(sync.syncOne, ctx, vehicle, line)
+        if ok and n == 1 then
+          log("recolored vehicle ", vehicle, " to line ", line, " (event ", name, ")")
         end
       end
     end,

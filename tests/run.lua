@@ -26,6 +26,13 @@ local function mock(opts)
   local sent = {}
   local api = {
     engine = {
+      system = {
+        transportVehicleSystem = {
+          getLineVehicles = function(line)
+            return (opts.lineVehicles or {})[line] or {}
+          end,
+        },
+      },
       getComponent = function(entity, ct)
         if opts.throwGet then error("boom") end
         if ct == CT.Color then
@@ -169,6 +176,50 @@ do
     and watch.WATCHED.makeLineUpdateCmd == true
     and watch.WATCHED.makeEntitySetColorCmd == true
     and (watch.WATCHED.makeTownCreateCmd or false) == false)
+end
+
+-- sync.lua: line-wide + entity-classified recolor (engine side)
+do
+  local red, blue = C(1, 0, 0), C(0, 0, 1)
+  local ctx = mock({
+    lineColor = { [10] = red },
+    tv = { [100] = { line = 10 }, [101] = { line = 10 } },
+    vehColor = { [100] = blue, [101] = red },
+    lineVehicles = { [10] = { 100, 101 } },
+  })
+  check("syncLine recolors line fleet", sync.syncLine(ctx, 10) == 1
+    and #ctx.sent == 1 and ctx.sent[1].entity == 100)
+  check("syncLine nil-safe", sync.syncLine(ctx, nil) == 0 and sync.syncLine({}, 10) == 0)
+
+  -- syncEntity: LINE component -> whole line
+  local ctx2 = mock({
+    lineColor = { [10] = red },
+    tv = { [100] = { line = 10 } },
+    vehColor = { [100] = blue },
+    lineVehicles = { [10] = { 100 } },
+  })
+  ctx2.api.engine.getComponent = function(entity, ct)
+    if ct == CT.Color then
+      if entity == 10 then return { color = red } end
+      if entity == 100 then return { color = blue } end
+      return nil
+    end
+    if ct == 99 then -- LINE probe: only entity 10 is a line
+      if entity == 10 then return { stops = {} } end
+      return nil
+    end
+    if ct == CT.TransportVehicle then
+      if entity == 100 then return { line = 10 } end
+      return nil
+    end
+    return nil
+  end
+  local CTLINE = { Color = CT.Color, TransportVehicle = CT.TransportVehicle, LINE = 99 }
+  ctx2.componentType = CTLINE
+  check("syncEntity classifies line", sync.syncEntity(ctx2, 10) == 1)
+  check("syncEntity classifies vehicle", sync.syncEntity(ctx2, 100) == 1)
+  check("syncEntity ignores unknown", sync.syncEntity(ctx2, 999) == 0)
+  check("syncEntity nil-safe", sync.syncEntity(ctx2, nil) == 0)
 end
 
 print(string.format("--- %d passed, %d failed ---", passed, failed))

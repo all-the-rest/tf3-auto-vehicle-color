@@ -1,9 +1,14 @@
 -- Auto Vehicle Color: GUI hook (runs inside Transport Fever 3 GUI state).
 -- Installed ONCE via prepare() (react-replacement-config, replaces no
 -- recipe): wraps api.cmd factories + sendCommand (technique proven by
--- TPF3MP's guard.lua) and issues setColor follow-ups ONLY after watched
+-- TPF3MP's guard.lua) and notifies the engine script after watched
 -- commands commit successfully. No ticks, no polling, commands are never
 -- blocked or altered, only observed.
+--
+-- The GUI recipe state cannot read components (lazy enum proxies), so
+-- the hook performs ZERO engine reads: it forwards { vehicle, line } /
+-- { line } / { entity } via makeScriptingSendEventCmd, and the engine
+-- game script (where reads work) does the recoloring.
 --
 -- Diagnostics: watch the ingame console (key below ESC) or stdout.txt.
 
@@ -27,98 +32,29 @@ function data()
     return { n = select("#", ...), ... }
   end
 
-  local function context()
-    if api and api.type and api.type.ComponentType then
-      return { api = api, componentType = api.type.ComponentType }
-    end
-    return nil
-  end
-
-  local probed = false
-  local function probeComponentTypes()
-    if probed then return end
-    probed = true
-    local function keysOf(t, n)
-      if type(t) ~= "table" then return "type=" .. type(t) end
-      local ks = {}
-      local c = 0
-      for k, v in pairs(t) do
-        c = c + 1
-        if #ks < 15 then ks[#ks + 1] = tostring(k) .. "=" .. type(v) end
-      end
-      return n .. " keys(" .. c .. "): " .. table.concat(ks, ", ")
-    end
-    log(keysOf(api and api.type and api.type.ComponentType, "api.type.ComponentType"))
-    log(keysOf(Engine and Engine.ComponentType, "Engine.ComponentType"))
-    log(keysOf(api and api.engine and api.engine.ComponentType, "api.engine.ComponentType"))
-  end
-
-      local function executeTargets(targets)    local sync = loadModule("sync.lua")
-    local ctx = context()
-    if not sync or not ctx then
-      log("executeTargets: missing sync or component types")
-      return 0
-    end
-    local recolored = 0
-    local function recolor(vehicle, line)
-      local okTv, tv = pcall(api.engine.getComponent, vehicle, ctx.componentType.TransportVehicle)
-      local okLc, lc = pcall(api.engine.getComponent, line, ctx.componentType.Color)
-      local okVc, vc = pcall(api.engine.getComponent, vehicle, ctx.componentType.Color)
-      log("recolor? vehicle=", vehicle, " targetLine=", line,
-        " tvLine=", okTv and tv and tv.line or "n/a",
-        " depot=", okTv and tv and tostring(tv.depot) or "n/a",
-        " lineColor=", okLc and lc and lc.color and "yes" or "no",
-        " vehColor=", okVc and vc and vc.color and "yes" or "no",
-        " errTv=", (not okTv) and tostring(tv) or "-",
-        " errLc=", (not okLc) and tostring(lc) or "-",
-        " errVc=", (not okVc) and tostring(vc) or "-",
-        " getComp=", type(api.engine.getComponent),
-        " CT-TV=", tostring(ctx.componentType.TransportVehicle),
-        " CT-C=", tostring(ctx.componentType.Color))
-      local ok, n = pcall(sync.syncOne, ctx, vehicle, line)
-      if ok and n == 1 then
-        recolored = recolored + 1
-        log("recolored vehicle ", vehicle, " to line ", line)
-      end
-    end
-    local lineVehiclesOf = {}
+  -- Forward targets to the engine script; it reads + recolors there.
+  local function notify(targets)
     for _, t in ipairs(targets) do
-      if t.vehicle ~= nil then
-        local line = t.line
-        if line == nil then
-          local ok, tv = pcall(api.engine.getComponent, t.vehicle, ctx.componentType.TransportVehicle)
-          if ok and tv then line = tv.line end
-        end
-        if line ~= nil then
-          recolor(t.vehicle, line)
-        else
-          log("no line for vehicle ", t.vehicle, " (depot/unassigned?)")
-        end
+      local param = nil
+      if t.vehicle ~= nil and t.line ~= nil then
+        param = { vehicle = t.vehicle, line = t.line }
+      elseif t.vehicle ~= nil then
+        param = { entity = t.vehicle }
       elseif t.lineVehiclesOf ~= nil then
-        lineVehiclesOf[#lineVehiclesOf + 1] = t.lineVehiclesOf
+        param = { line = t.lineVehiclesOf }
       elseif t.maybeLine ~= nil then
-        local ok, lineComp = pcall(api.engine.getComponent, t.maybeLine, ctx.componentType.LINE)
-        if ok and lineComp then
-          lineVehiclesOf[#lineVehiclesOf + 1] = t.maybeLine
+        param = { entity = t.maybeLine }
+      end
+      if param ~= nil then
+        local ok, cmd = pcall(api.cmd.makeScriptingSendEventCmd, "", MOD, "recolor", param)
+        if ok and cmd ~= nil then
+          pcall(api.cmd.sendCommand, cmd)
+          log("notified engine")
         else
-          local okTv, tv = pcall(api.engine.getComponent, t.maybeLine, ctx.componentType.TransportVehicle)
-          if okTv and tv and tv.line then
-            recolor(t.maybeLine, tv.line)
-          end
+          log("notify failed")
         end
       end
     end
-    for _, line in ipairs(lineVehiclesOf) do
-      local ok, vehicles = pcall(function()
-        return api.engine.system.transportVehicleSystem.getLineVehicles(line)
-      end)
-      if ok and type(vehicles) == "table" then
-        for _, vehicle in ipairs(vehicles) do
-          recolor(vehicle, line)
-        end
-      end
-    end
-    return recolored
   end
 
   local function install(cmd)
@@ -128,12 +64,8 @@ function data()
     local calls = {} -- command object -> factory args {n=...}
 
     -- Wrap factories to record kind + args per command object.
-    local wrapped, total, samples = 0, 0, {}
+    local wrapped = 0
     for name, factory in pairs(cmd) do
-      total = total + 1
-      if #samples < 12 then
-        samples[#samples + 1] = tostring(name) .. ":" .. type(factory)
-      end
       if type(name) == "string" and name:match("^make.+Cmd$") then
         local orig = factory
         cmd[name] = function(...)
@@ -151,9 +83,9 @@ function data()
     local origSend = cmd.sendCommand
     cmd.sendCommand = function(command, callback, ...)
       local kind = kinds[command]
-      -- Pass through untouched: unknown, unwatched, or callback-less
-      -- (incl. our own follow-ups, which never carry a callback, so they
-      -- can never re-enter executeTargets: loop-safe by construction).
+      -- Pass through untouched: unknown, unwatched, or callback-less.
+      -- Our notify events carry no callback and pass through as well,
+      -- so they can never re-enter notify: loop-safe by construction.
       if kind == nil or not watch.WATCHED[kind] or type(callback) ~= "function" then
         return origSend(command, callback, ...)
       end
@@ -168,9 +100,9 @@ function data()
           elseif #targets == 0 then
             log("no targets for ", kind)
           else
-            local okE, err = pcall(executeTargets, targets)
-            if not okE then
-              log("executeTargets error: ", tostring(err))
+            local okN, err = pcall(notify, targets)
+            if not okN then
+              log("notify error: ", tostring(err))
             end
           end
         else
@@ -181,10 +113,7 @@ function data()
       return origSend(command, callback, ...)
     end
 
-    log("hook installed (", wrapped, " factories wrapped, ", total, " api.cmd entries)")
-    if total > 0 then
-      log("api.cmd sample: ", table.concat(samples, ", "))
-    end
+    log("hook installed (", wrapped, " factories wrapped)")
     return true
   end
 
@@ -194,7 +123,6 @@ function data()
         log("prepare: no api.cmd, hook NOT installed")
         return
       end
-      pcall(probeComponentTypes)
       local ok, done = pcall(install, api.cmd)
       if not (ok and done) then
         log("prepare: install failed")

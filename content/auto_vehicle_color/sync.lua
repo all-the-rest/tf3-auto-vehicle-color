@@ -80,4 +80,37 @@ end
 M.sameColor = sameColor
 M.isActive = isActive
 
+--- Recolor every vehicle of one line to the line color.
+-- @return number of setColor commands sent
+function M.syncLine(context, lineEntity)
+  local api = context.api
+  if not api or not lineEntity then return 0 end
+  local ok, vehicles = pcall(function()
+    return api.engine.system.transportVehicleSystem.getLineVehicles(lineEntity)
+  end)
+  if not ok or type(vehicles) ~= "table" then return 0 end
+  local sent = 0
+  for _, vehicle in ipairs(vehicles) do
+    sent = sent + M.syncOne(context, vehicle, lineEntity)
+  end
+  return sent
+end
+
+--- Classify any entity and recolor accordingly (engine side, where
+-- component reads work). Lines -> whole line; vehicles -> single.
+-- @return number of setColor commands sent
+function M.syncEntity(context, entity)
+  local api, CT = context.api, context.componentType
+  if not api or not CT or not entity then return 0 end
+  local okLine, lineComp = pcall(api.engine.getComponent, entity, CT.LINE)
+  if okLine and lineComp then
+    return M.syncLine(context, entity)
+  end
+  local okTv, tv = pcall(api.engine.getComponent, entity, CT.TransportVehicle)
+  if okTv and tv and tv.line then
+    return M.syncOne(context, entity, tv.line)
+  end
+  return 0
+end
+
 return M
