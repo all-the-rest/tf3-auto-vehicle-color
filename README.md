@@ -1,127 +1,34 @@
 # Auto Vehicle Color (Transport Fever 3)
 
-Vehicles automatically take the color of their line. When a vehicle is
-assigned to a line or a line color changes, its vehicles are recolored
-immediately — no manual repainting, no polling.
+![Tram in line color](https://github.com/all-the-rest/tf3-auto-vehicle-color/blob/main/_metadata/0.png)
 
-- Scope: **all** vehicles of the line, depot vehicles included (right
-  after buy+assign the vehicle is still parked, and the depot list reads
-  the same color component).
-- Manual vehicle colors are **overwritten** — the line color wins at the
-  next event.
+Vehicles automatically take the color of their line — no manual repainting.
+
+## What it does
+
+- **Buy or assign a vehicle** → it takes the line color immediately, depot vehicles included.
+- **Change a line's color** → the whole fleet follows at once.
+- **Load a save** → all vehicles of all lines are corrected once.
+
+Manual vehicle colors are **overwritten**: the line color always wins. The mod is flagged `cosmetic`, so achievements stay earnable with only this mod active.
+
+## Install
+
+Subscribe in-game via the Mod Hub, or get it here: https://mod.io/g/transportfever3/m/auto-vehicle-color1
+
+Then activate it for your save like any other mod. No configuration, no settings.
+
+## Good to know
+
+- Works for all vehicle types on all lines (bus, tram, truck, train, ship, plane).
+- Changes made by other mods, or propagated in multiplayer, are picked up at the next session start.
 - Mod ID: `alltherest_auto_vehicle_color`
 
-## How it works (strictly event-driven, see AGENTS.md Rule 0)
+## For developers
 
-Two triggers, zero polling:
+Strictly event-driven, zero polling: a GUI hook observes assignments, purchases and line-color changes and recolors immediately; a one-time pass corrects existing vehicles when a save is loaded. There is no arrival fallback — sending commands during engine events is illegal in TF3.
 
-1. **Assignment-time (GUI hook)** — `gui/hook.script.lua` wraps
-   `api.cmd` factories + `sendCommand` (technique copied from TPF3MP's
-   `guard.lua`). When `makeVehicleSetLineCmd`, `makeVehicleReplaceCmd`,
-   `makeVehicleBuyCmd`, `makeLineUpdateCmd` or a line-targeted
-   `makeEntitySetColorCmd` commits successfully, the affected
-   vehicle(s) are recolored immediately — visible right after buy+assign.
-   Commands are never blocked, only observed; without a success callback
-   nothing happens (arrival fallback covers it).
-2. **One-time initial correction (engine script)** — on the first
-   `update()` of a save, every vehicle of every line is repainted once
-   (`syncAllLines`), so the vehicles that already existed when the save was
-   loaded get their line color too. Claimed through the shared script
-   state, so it runs exactly once per save.
-
-There is **no arrival fallback** (user decision): sending a command while
-an engine event is dispatched is illegal
-(`BeginModification: Assertion '!m_betweenChanges' failed`, a fatal error
-per call — with 1277 vehicles that made the game stutter), and vanilla
-only sends commands from `update()` or from scripting events. Engine
-events are therefore observed (capped log line) but never acted on.
-
-Both paths read current engine state and act only on a color mismatch.
-A vehicle that has never been painted has no `COLOR` component yet, so it
-is painted once (`recolored-first-time`) — that command creates the
-component, exactly like the vanilla paint bucket.
-Every no-op logs its reason (`syncOne -> 0 (already-line-color)`,
-`syncLine -> 0/7 (not-on-this-line=7)`), so nothing fails silently.
-
-`update()` only subscribes to engine events (base-game pattern),
-including the hook's own `recolor` event name (`events.lua`) — a game
-script only receives scripting events it has subscribed to.
-
-Why this shape: there is NO engine event for "vehicle assigned" or
-"line color changed" (verified: 0 hits in 1443 base-game script files).
-
-## Layout (TF3 mod format)
-
-```
-AGENTS.md                                           rules + verified API ground truth
-mod.json                                            modId, revision, scripts
-_metadata/modinfo.json                              browser name/description
-content/auto_vehicle_color/sync.lua                 pure logic (testable)
-content/auto_vehicle_color/events.lua               GUI <-> engine contract (id + event name)
-content/auto_vehicle_color/auto_vehicle_color.gs.lua      game script wiring
-content/auto_vehicle_color/auto_vehicle_color.script.lua engine entry point
-content/auto_vehicle_color/gui/hook.res.lua             react-plugin descriptor
-content/auto_vehicle_color/gui/hook.script.lua          sendCommand wrapper (observe-only)
-content/auto_vehicle_color/gui/watch.lua                command -> targets (testable)
-tests/run.lua                                       headless unit tests
-tools/avc_log.sh                                    dump the mod's game-log lines
-```
-
-## Tests (no game needed)
-
-```sh
-lua tests/run.lua
-```
-
-Pure logic + mocked `api.engine` / `api.cmd`. 60 cases: recolor,
-match-skip, depot-skip, foreign-line-skip, nil-safety, error survival,
-event gating (incl. rejecting invented `line.changed` /
-`api.cmd.SetLine` names), event duck-typing, command→target mapping,
-helpers, `ComponentType` member resolution (camelCase keys are rejected),
-the no-op reasons (including the depot case: depot vehicles are
-recolored), and the `events.lua` contract (the engine subscribes to the
-hook's event name; both sides import the constants).
-
-## In-game verification (still needed)
-
-Install (symlinked, no copy step — repo edits apply after game restart):
-
-```sh
-ln -s ~/dev/tf3-auto-vehicle-color "<TF3-mods>/alltherest_auto_vehicle_color"
-```
-
-After a restart + save load, `sh tools/avc_log.sh` prints the mod-relevant
-lines of the newest game log (`[AVC]` probes, game-script wiring, load
-errors) — no need to scroll the in-game console.
-
-Then: enable debug mode (`debugMode = true` in the game's `settings.lua`
-(`Steam/userdata/<steamid>/<appid>/local/`), or game settings →
-advanced), activate the mod for a save, open the console with `^`/`§`/`
-(below ESC) — it mirrors `stdout.txt` and runs Lua one-liners.
-
-Unverified in the live game and marked as such:
-
-1. ~~Install the mod folder as a TF3 mod, start a save.~~ **verified**
-   2026-10-07: `Creating entity for GameScript`, `engine script
-   subscribed` (all sim pools), `getEntityForGameScript(...) = 342266`.
-2. ~~Buy + assign a vehicle → correct line color immediately.~~
-   **verified** 2026-10-07 (tram, still in the depot at that moment).
-3. ~~Change the line color → vehicles follow immediately.~~ **verified**
-   2026-10-07 (`syncEntity` on the line entity, fleet recolored).
-4. ~~One-time initial correction on save load~~ **verified** 2026-10-07:
-   `initial correction: 1277/1277 vehicles, 224 lines
-   (recolored-first-time=1277)`; 0 engine assertions, 0 failed commands.
-   After that only GUI-observed actions recolor (accepted gap: changes made
-   by other mods or in multiplayer are picked up at the next session start).
-5. Open the console (`debugPrint`) if behavior differs; likely suspects:
-   `TransportVehicle.depot` convention, factory-wrap visibility of
-   command objects, plugin load order vs. other GUI mods.
-
-## Sources
-
-- Installed game files (`steamapps/common/Transport Fever 3/base`):
-  `arrivaltracker.script.tl`, `achievements.script.tl`, `loan.script.tl`,
-  `vehicle_eow.script.tl`, `api/tealdef` — read-only, never modified.
-- https://wiki.transportfever3.com/script-doc/ (`api/cmd`, `api/engine`,
-  `api/engine/system`, `content/scripts/gamescript`)
-- TPF3MP investigation docs (game-script signatures, command capture)
+- Rules and verified API ground truth: [AGENTS.md](AGENTS.md)
+- Decision protocol: [AGENTS.todo.md](AGENTS.todo.md)
+- Headless unit tests, no game needed: `lua tests/run.lua` (60 cases, zero dependencies)
+- Mod layout follows the official format (`mod.json`, `_metadata/modinfo.json`, `content/`, see the [modding manual](https://wiki.transportfever3.com/doku.php?id=modding:general:moddefinition))
