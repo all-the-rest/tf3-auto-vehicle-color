@@ -70,6 +70,10 @@ without manual repainting.
   color has to be visible immediately after buy+assign (also the only
   way to test it). Arrival recolor stays as fallback for script-driven
   and multiplayer-propagated changes.
+- Reverse rule (user, 2026-10-07, pending test of forward direction):
+  if ALL vehicles on a line share one color, adopt it as the line
+  color (vehicles -> line). Unanimity required; mixed colors change
+  nothing.
 - Tests: plain `lua tests/run.lua`, mocked `api`, zero dependencies.
 - modId: `alltherest_auto_vehicle_color`.
 

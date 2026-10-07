@@ -34,8 +34,7 @@ function data()
     return nil
   end
 
-  local function executeTargets(targets)
-    local sync = loadModule("sync.lua")
+      local function executeTargets(targets)    local sync = loadModule("sync.lua")
     local ctx = context()
     if not sync or not ctx then
       log("executeTargets: missing sync or component types")
@@ -50,7 +49,13 @@ function data()
         " tvLine=", okTv and tv and tv.line or "n/a",
         " depot=", okTv and tv and tostring(tv.depot) or "n/a",
         " lineColor=", okLc and lc and lc.color and "yes" or "no",
-        " vehColor=", okVc and vc and vc.color and "yes" or "no")
+        " vehColor=", okVc and vc and vc.color and "yes" or "no",
+        " errTv=", (not okTv) and tostring(tv) or "-",
+        " errLc=", (not okLc) and tostring(lc) or "-",
+        " errVc=", (not okVc) and tostring(vc) or "-",
+        " getComp=", type(api.engine.getComponent),
+        " CT-TV=", tostring(ctx.componentType.TransportVehicle),
+        " CT-C=", tostring(ctx.componentType.Color))
       local ok, n = pcall(sync.syncOne, ctx, vehicle, line)
       if ok and n == 1 then
         recolored = recolored + 1
