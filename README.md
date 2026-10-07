@@ -2,34 +2,37 @@
 
 Vehicles automatically take the color of their line. When a vehicle is
 assigned to a line or a line color changes, active vehicles are recolored
-without manual repainting.
+at their next arrival event — no manual repainting, no polling.
 
 - Scope: only **active** vehicles (parked/depot vehicles are skipped).
-- Manual vehicle colors are **overwritten** — the line color always wins.
+- Manual vehicle colors are **overwritten** — the line color wins at the
+  next event.
 - Mod ID: `alltherest_auto_vehicle_color`
 
-## How it works
+## How it works (strictly event-driven, see AGENTS.md Rule 0)
 
-No documented engine event exists for "vehicle assigned" or "line color
-changed" ([script-doc](https://wiki.transportfever3.com/script-doc/),
-verified Oct 2026), so the mod is a hybrid:
+`update()` only subscribes to engine events (base-game pattern). All
+logic runs in `handleEvent`:
 
-1. **Event fast path** — `handleEvent` recolors a single vehicle (O(1))
-   the moment an engine event carrying `vehicleEntity + lineEntity`
-   arrives (e.g. `OnArriveAtStop`). Param duck-typing keeps it robust
-   against exact src/name strings.
-2. **Throttled sweep fallback** — `update` runs `syncAll` at most every
-   3 s (real time via `os.clock`, so it also works while paused) with a
-   line-color + entity-revision cache. Steady state costs ~1 cheap call
-   per vehicle and sends commands only on actual mismatch.
+- `TransportVehicleSystem` / `OnArriveAtStop` — param carries
+  `vehicleEntity` + `lineEntity` (same shape the vanilla achievements
+  script consumes). The vehicle is recolored to its line color via
+  `api.cmd.makeEntitySetColorCmd` — the exact call the vanilla vehicle
+  window uses. Sending commands from `handleEvent` is vanilla-sanctioned
+  (cf. `loan.script.tl`: `Obtain`/`Repay` → `sendCommand` with callback).
+- `OnCargoLoaded` / `OnCargoUnloaded` — same single-vehicle path,
+  duck-typed.
 
-Recoloring uses the documented `api.cmd.makeEntitySetColorCmd`, reading
-via `api.engine.getComponent` (`Color`, `TransportVehicle`) and
-`transportVehicleSystem.getLineVehicles` / `lineSystem.getLines`.
+Why this converges without polling: an assigned vehicle drives to its
+first stop → event → recolor. A line color change reaches every active
+vehicle at its next stop. There is NO engine event for "vehicle
+assigned" or "line color changed" (verified: 0 hits in 1443 base-game
+script files), so arrival events are the canonical trigger.
 
 ## Layout (TF3 mod format)
 
 ```
+AGENTS.md                                           rules + verified API ground truth
 mod.json                                            modId, revision, scripts
 _metadata/modinfo.json                              browser name/description
 content/auto_vehicle_color/sync.lua                 pure logic (testable)
@@ -44,25 +47,27 @@ tests/run.lua                                       headless unit tests
 lua tests/run.lua
 ```
 
-Pure logic + mocked `api.engine` / `api.cmd`. 12 cases: recolor,
-match-skip, depot-skip, foreign-line-skip, line-change follow-up,
-new-assignment catch, cache silence, error survival, event duck-typing.
+Pure logic + mocked `api.engine` / `api.cmd`. 10 cases: recolor,
+match-skip, depot-skip, foreign-line-skip, nil-safety, error survival,
+event gating (incl. rejecting invented `line.changed` /
+`api.cmd.SetLine` names), event duck-typing, helpers.
 
 ## In-game verification (still needed)
 
-`os.clock` throttle, `subscribeToEvent("OnArriveAtStop")` string, and
-`TransportVehicle.depot` nil/-1 convention are best-effort from docs +
-third-party mods and **not yet measured in the live game**. To verify:
+`TransportVehicle.depot` nil/-1 convention and the arrival-event flow
+are best-effort from docs + third-party mods and **not yet measured in
+the live game**. To verify:
 
 1. Install the mod folder as a TF3 mod, start a save.
-2. Assign a bus to a colored line → recolored within ~3 s.
-3. Change the line color → vehicles follow within ~3 s / at next stop.
-4. Open the console (`debugPrint`) if behavior differs; likely suspects
-   are the event name string and the depot-field convention.
+2. Assign a bus to a colored line → recolored at its first stop.
+3. Change the line color → vehicles follow at their next stops.
+4. Open the console (`debugPrint`) if behavior differs.
 
 ## Sources
 
-- https://wiki.transportfever3.com/doku.php?id=modding:start&redirect=1
+- Installed game files (`steamapps/common/Transport Fever 3/base`):
+  `arrivaltracker.script.tl`, `achievements.script.tl`, `loan.script.tl`,
+  `vehicle_eow.script.tl`, `api/tealdef` — read-only, never modified.
 - https://wiki.transportfever3.com/script-doc/ (`api/cmd`, `api/engine`,
   `api/engine/system`, `content/scripts/gamescript`)
 - TPF3MP investigation docs (game-script signatures, command capture)
