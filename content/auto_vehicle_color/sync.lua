@@ -97,6 +97,11 @@ function M.syncOne(context, vehicleEntity, lineEntity)
   if not api or not CT or not vehicleEntity or not lineEntity then
     return 0, "missing-arguments"
   end
+  -- An unassigned vehicle carries the -1 sentinel as its line (observed:
+  -- buy -> syncEntity -> syncOne(-1) logged a scary "line-read-failed").
+  if type(lineEntity) == "number" and lineEntity < 0 then
+    return 0, "no-line-yet"
+  end
 
   local okLine, lineComp = pcall(api.engine.getComponent, lineEntity, CT.COLOR)
   local lineColor = okLine and lineComp and lineComp.color or nil

@@ -73,7 +73,7 @@ tools/avc_log.sh                                    dump the mod's game-log line
 lua tests/run.lua
 ```
 
-Pure logic + mocked `api.engine` / `api.cmd`. 59 cases: recolor,
+Pure logic + mocked `api.engine` / `api.cmd`. 60 cases: recolor,
 match-skip, depot-skip, foreign-line-skip, nil-safety, error survival,
 event gating (incl. rejecting invented `line.changed` /
 `api.cmd.SetLine` names), event duck-typing, command→target mapping,
@@ -108,8 +108,11 @@ Unverified in the live game and marked as such:
    **verified** 2026-10-07 (tram, still in the depot at that moment).
 3. ~~Change the line color → vehicles follow immediately.~~ **verified**
    2026-10-07 (`syncEntity` on the line entity, fleet recolored).
-4. One-time initial correction on save load → existing vehicles corrected
-   (`initial correction: N/M vehicles, L lines`). **open**
+4. ~~One-time initial correction on save load~~ **verified** 2026-10-07:
+   `initial correction: 1277/1277 vehicles, 224 lines
+   (recolored-first-time=1277)`; 0 engine assertions, 0 failed commands.
+   After that only GUI-observed actions recolor (accepted gap: changes made
+   by other mods or in multiplayer are picked up at the next session start).
 5. Open the console (`debugPrint`) if behavior differs; likely suspects:
    `TransportVehicle.depot` convention, factory-wrap visibility of
    command objects, plugin load order vs. other GUI mods.

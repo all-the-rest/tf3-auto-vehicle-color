@@ -144,6 +144,10 @@ do
   local n1, r1 = reasonOf({}, nil, nil)
   check("reason: missing arguments", n1 == 0 and r1 == "missing-arguments")
 
+  -- A freshly bought, not yet assigned vehicle has line = -1.
+  local n0, r0 = reasonOf({}, 100, -1)
+  check("reason: not assigned yet", n0 == 0 and r0 == "no-line-yet")
+
   local n2, r2 = reasonOf({ tv = { [100] = { line = 10 } } }, 100, 10)
   check("reason: line has no color", n2 == 0 and r2 == "line-has-no-color")
 
