@@ -57,26 +57,32 @@ function data()
           local okTv, tv = pcall(api.engine.getComponent, param.vehicle, CT.TRANSPORT_VEHICLE)
           log("decision: vehicle=", param.vehicle, " targetLine=", param.line,
             " tvLine=", okTv and tv and tv.line or "n/a",
-            " depot=", okTv and tv and tostring(tv.depot) or "n/a",
             " tvErr=", (not okTv) and tostring(tv) or "-")
-          local ok, n = pcall(sync.syncOne, ctx, param.vehicle, param.line)
-          log("syncOne -> ", ok and n or ("ERR " .. tostring(n)))
-          if ok and n == 1 then
+          local ok, n, reason = pcall(sync.syncOne, ctx, param.vehicle, param.line)
+          if not ok then
+            log("syncOne error: ", tostring(n))
+          elseif n == 1 then
             log("recolored vehicle ", param.vehicle, " to line ", param.line, " (hook)")
+          else
+            log("syncOne -> 0 (", reason, ")")
           end
         elseif param.line ~= nil then
-          local ok, n = pcall(sync.syncLine, ctx, param.line)
-          if ok and n > 0 then
-            log("recolored ", n, " vehicles to line ", param.line, " (hook)")
-          elseif not ok then
+          local ok, n, summary, total = pcall(sync.syncLine, ctx, param.line)
+          if not ok then
             log("syncLine error: ", tostring(n))
+          elseif n > 0 then
+            log("recolored ", n, "/", total, " vehicles of line ", param.line, " (hook)")
+          else
+            log("syncLine -> 0/", total, " (", summary, ")")
           end
         elseif param.entity ~= nil then
-          local ok, n = pcall(sync.syncEntity, ctx, param.entity)
-          if ok and n > 0 then
-            log("recolored ", n, " via entity ", param.entity, " (hook)")
-          elseif not ok then
+          local ok, n, summary, total = pcall(sync.syncEntity, ctx, param.entity)
+          if not ok then
             log("syncEntity error: ", tostring(n))
+          elseif n > 0 then
+            log("recolored ", n, "/", total, " via entity ", param.entity, " (hook)")
+          else
+            log("syncEntity -> 0/", total, " (", summary, ")")
           end
         end
         return
@@ -88,16 +94,16 @@ function data()
       end
       local vehicle, line = sync.extractVehicleLine(param)
       if vehicle and line then
-        local ok, n = pcall(sync.syncOne, ctx, vehicle, line)
-        if ok and n == 1 then
-          log("recolored vehicle ", vehicle, " to line ", line, " (event ", name, ")")
-        elseif not ok then
+        local ok, n, reason = pcall(sync.syncOne, ctx, vehicle, line)
+        if not ok then
           log("event ", name, ": syncOne error ", tostring(n))
+        elseif n == 1 then
+          log("recolored vehicle ", vehicle, " to line ", line, " (event ", name, ")")
         elseif fallbackNotes < 5 then
-          -- DIAGNOSTIC: why the arrival fallback did nothing (depot gate,
-          -- colors already equal, unreadable components).
+          -- DIAGNOSTIC: why the arrival fallback did nothing.
           fallbackNotes = fallbackNotes + 1
-          log("event ", name, ": nothing to do (vehicle=", vehicle, " line=", line, ")")
+          log("event ", name, ": nothing to do (vehicle=", vehicle, " line=", line,
+            " reason=", reason, ")")
         end
       end
     end,

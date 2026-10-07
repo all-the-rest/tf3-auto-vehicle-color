@@ -14,6 +14,9 @@
 -- argument #3" and silently turns every read into a no-op — that was a
 -- real bug, so the keys live in COMPONENT_KEYS and are resolved via
 -- resolveComponentTypes() instead of being indexed ad hoc.
+--
+-- Every function that does nothing says WHY: a no-op returns
+-- (0, reason). Silence is what made the previous bugs invisible.
 local M = {}
 
 local EPS = 1e-2 -- same tolerance class as vanilla UI color handling
@@ -54,13 +57,16 @@ local function sameColor(a, b)
     and math.abs(channel(a, "z") - channel(b, "z")) < EPS
 end
 
--- A vehicle counts as "active" when it is not sitting in a depot.
--- TransportVehicle.depot holds the depot entity while parked
--- (nil / -1 when on the road). Decision: skip depot vehicles.
-local function isActive(transportVehicle)
+--- Whether a TransportVehicle is parked in a depot.
+-- `depot` holds the depot entity while parked (nil / -1 on the road).
+-- Decision (user, 2026-10-07): depot vehicles ARE recolored too — the
+-- correct color has to be visible right after buy+assign, and the depot
+-- list / vehicle window read the same color component. This helper is
+-- kept for diagnostics only; it no longer gates the recolor.
+function M.isInDepot(transportVehicle)
   if transportVehicle == nil then return false end
   local depot = transportVehicle.depot
-  return depot == nil or depot == -1
+  return depot ~= nil and depot ~= -1
 end
 
 --- Whether an engine event (by system id + event name) carries a
@@ -85,63 +91,86 @@ function M.extractVehicleLine(param)
 end
 
 --- Recolor one vehicle to its line color if needed.
--- @return 1 if a setColor command was sent, 0 otherwise
+-- @return 1, "recolored" if a setColor command was sent, else 0, reason
 function M.syncOne(context, vehicleEntity, lineEntity)
   local api, CT = context.api, context.componentType
-  if not api or not CT or not vehicleEntity or not lineEntity then return 0 end
+  if not api or not CT or not vehicleEntity or not lineEntity then
+    return 0, "missing-arguments"
+  end
 
   local okLine, lineComp = pcall(api.engine.getComponent, lineEntity, CT.COLOR)
   local lineColor = okLine and lineComp and lineComp.color or nil
-  if not lineColor then return 0 end
+  if not lineColor then
+    return 0, okLine and "line-has-no-color" or "line-read-failed"
+  end
 
   local okTv, tv = pcall(api.engine.getComponent, vehicleEntity, CT.TRANSPORT_VEHICLE)
-  if not (okTv and tv and tv.line == lineEntity and isActive(tv)) then return 0 end
+  if not (okTv and tv) then return 0, "vehicle-read-failed" end
+  if tv.line ~= lineEntity then return 0, "not-on-this-line" end
+  -- No depot gate here on purpose: depot vehicles take the line color too.
 
   local okVeh, vehComp = pcall(api.engine.getComponent, vehicleEntity, CT.COLOR)
+  if not okVeh then return 0, "vehicle-color-read-failed" end
   local vehColor = okVeh and vehComp and vehComp.color or nil
-  if vehColor and not sameColor(vehColor, lineColor) then
-    local okCmd = pcall(function()
-      api.cmd.sendCommand(api.cmd.makeEntitySetColorCmd(vehicleEntity, lineColor))
-    end)
-    if okCmd then return 1 end
-  end
-  return 0
+  if not vehColor then return 0, "vehicle-has-no-color" end
+  if sameColor(vehColor, lineColor) then return 0, "already-line-color" end
+
+  local okCmd = pcall(function()
+    api.cmd.sendCommand(api.cmd.makeEntitySetColorCmd(vehicleEntity, lineColor))
+  end)
+  if not okCmd then return 0, "command-failed" end
+  return 1, "recolored"
 end
 
-M.sameColor = sameColor
-M.isActive = isActive
+--- Compact "reason=count" summary, deterministic order.
+function M.summarize(reasons)
+  local parts = {}
+  for reason, count in pairs(reasons) do
+    parts[#parts + 1] = reason .. "=" .. count
+  end
+  table.sort(parts)
+  return table.concat(parts, " ")
+end
 
 --- Recolor every vehicle of one line to the line color.
--- @return number of setColor commands sent
+-- @return number of setColor commands sent, reason summary, vehicles seen
 function M.syncLine(context, lineEntity)
   local api = context.api
-  if not api or not lineEntity then return 0 end
+  if not api or not lineEntity then return 0, "missing-arguments", 0 end
   local ok, vehicles = pcall(function()
     return api.engine.system.transportVehicleSystem.getLineVehicles(lineEntity)
   end)
-  if not ok or type(vehicles) ~= "table" then return 0 end
-  local sent = 0
+  if not ok then return 0, "line-vehicles-read-failed", 0 end
+  if type(vehicles) ~= "table" then return 0, "no-vehicles", 0 end
+  local sent, total, reasons = 0, 0, {}
   for _, vehicle in ipairs(vehicles) do
-    sent = sent + M.syncOne(context, vehicle, lineEntity)
+    total = total + 1
+    local n, reason = M.syncOne(context, vehicle, lineEntity)
+    sent = sent + n
+    reasons[reason] = (reasons[reason] or 0) + 1
   end
-  return sent
+  if total == 0 then return 0, "no-vehicles", 0 end
+  return sent, M.summarize(reasons), total
 end
 
 --- Classify any entity and recolor accordingly (engine side, where
 -- component reads work). Lines -> whole line; vehicles -> single.
--- @return number of setColor commands sent
+-- @return number of setColor commands sent, reason summary, vehicles seen
 function M.syncEntity(context, entity)
   local api, CT = context.api, context.componentType
-  if not api or not CT or not entity then return 0 end
+  if not api or not CT or not entity then return 0, "missing-arguments", 0 end
   local okLine, lineComp = pcall(api.engine.getComponent, entity, CT.LINE)
   if okLine and lineComp then
     return M.syncLine(context, entity)
   end
   local okTv, tv = pcall(api.engine.getComponent, entity, CT.TRANSPORT_VEHICLE)
   if okTv and tv and tv.line then
-    return M.syncOne(context, entity, tv.line)
+    local n, reason = M.syncOne(context, entity, tv.line)
+    return n, reason, 1
   end
-  return 0
+  return 0, "not-a-line-or-line-vehicle", 0
 end
+
+M.sameColor = sameColor
 
 return M

@@ -82,14 +82,19 @@ do
   check("syncOne skips match", sync.syncOne(ctx, 100, 10) == 0 and #ctx.sent == 0)
 end
 
--- 3: depot vehicles are skipped (decision: active only)
+-- 3: depot vehicles are recolored too (user decision 2026-10-07):
+-- the color has to be right right after buy+assign, and the depot list
+-- reads the same color component.
 do
+  local red = C(1, 0, 0)
   local ctx = mock({
-    lineColor = { [10] = C(1, 0, 0) },
+    lineColor = { [10] = red },
     tv = { [100] = { line = 10, depot = 55 } },
     vehColor = { [100] = C(0, 0, 1) },
   })
-  check("syncOne skips depot vehicle", sync.syncOne(ctx, 100, 10) == 0 and #ctx.sent == 0)
+  local n = sync.syncOne(ctx, 100, 10)
+  check("syncOne recolors depot vehicle", n == 1 and #ctx.sent == 1
+    and ctx.sent[1].entity == 100 and ctx.sent[1].color == red)
 end
 
 -- 4: vehicle mapped to a different line is skipped
@@ -116,6 +121,72 @@ do
   check("syncOne survives engine errors", ok and n == 0 and #ctx.sent == 0)
 end
 
+-- 6b: every no-op reports WHY (silence hid two real bugs)
+do
+  local red = C(1, 0, 0)
+  local function reasonOf(opts, vehicle, line)
+    local ctx = mock(opts)
+    local n, reason = sync.syncOne(ctx, vehicle, line)
+    return n, reason
+  end
+  local n1, r1 = reasonOf({}, nil, nil)
+  check("reason: missing arguments", n1 == 0 and r1 == "missing-arguments")
+
+  local n2, r2 = reasonOf({ tv = { [100] = { line = 10 } } }, 100, 10)
+  check("reason: line has no color", n2 == 0 and r2 == "line-has-no-color")
+
+  local n3, r3 = reasonOf({ lineColor = { [10] = red } }, 100, 10)
+  check("reason: vehicle unreadable", n3 == 0 and r3 == "vehicle-read-failed")
+
+  local n4, r4 = reasonOf({ lineColor = { [10] = red }, tv = { [100] = { line = 11 } } }, 100, 10)
+  check("reason: foreign line", n4 == 0 and r4 == "not-on-this-line")
+
+  local n5, r5 = reasonOf({ lineColor = { [10] = red }, tv = { [100] = { line = 10 } } }, 100, 10)
+  check("reason: vehicle has no color component", n5 == 0 and r5 == "vehicle-has-no-color")
+
+  local n6, r6 = reasonOf({
+    lineColor = { [10] = red }, tv = { [100] = { line = 10 } }, vehColor = { [100] = red },
+  }, 100, 10)
+  check("reason: already line color", n6 == 0 and r6 == "already-line-color")
+
+  local ok = sync.syncOne(mock({ throwGet = true }), 100, 10)
+  local n7, r7 = sync.syncOne(mock({ throwGet = true }), 100, 10)
+  check("reason: engine read failed", ok == 0 and n7 == 0 and r7 == "line-read-failed")
+
+  local ctx8 = mock({ lineColor = { [10] = red }, tv = { [100] = { line = 10 } }, vehColor = { [100] = C(0,0,1) } })
+  ctx8.api.cmd.sendCommand = function() error("nope") end
+  local n8, r8 = sync.syncOne(ctx8, 100, 10)
+  check("reason: command failed", n8 == 0 and r8 == "command-failed")
+
+  check("reason: success", (select(2, sync.syncOne(mock({
+    lineColor = { [10] = red }, tv = { [100] = { line = 10 } }, vehColor = { [100] = C(0,0,1) },
+  }), 100, 10))) == "recolored")
+end
+
+-- 6c: line/entity summaries (a silent 0/7 was invisible before)
+do
+  local red, blue = C(1, 0, 0), C(0, 0, 1)
+  local ctx = mock({
+    lineColor = { [10] = red },
+    tv = { [100] = { line = 10 }, [101] = { line = 10 }, [102] = { line = 11 } },
+    vehColor = { [100] = blue, [101] = red, [102] = blue },
+    lineVehicles = { [10] = { 100, 101, 102 } },
+  })
+  local sent, summary, total = sync.syncLine(ctx, 10)
+  check("syncLine reports sent/summary/total", sent == 1 and total == 3
+    and summary == "already-line-color=1 not-on-this-line=1 recolored=1")
+  check("syncLine nil-safe", (select(2, sync.syncLine(ctx, nil))) == "missing-arguments")
+
+  local s2, sum2, t2 = sync.syncLine(mock({}), 10)
+  check("syncLine without vehicles reports no-vehicles", s2 == 0 and t2 == 0 and sum2 == "no-vehicles")
+
+  check("summarize is deterministic", sync.summarize({ b = 2, a = 1 }) == "a=1 b=2"
+    and sync.summarize({}) == "")
+
+  local s3, sum3, t3 = sync.syncEntity(mock({}), 999)
+  check("syncEntity reports unknown entity", s3 == 0 and t3 == 0 and sum3 == "not-a-line-or-line-vehicle")
+end
+
 -- 7: event gate matches base-game pattern, rejects the rest
 do
   check("shouldHandleEvent gates", sync.shouldHandleEvent("TransportVehicleSystem", "OnArriveAtStop") == true
@@ -139,8 +210,8 @@ end
 
 -- 9: helpers
 do
-  check("isActive", sync.isActive(nil) == false and sync.isActive({ depot = 3 }) == false
-    and sync.isActive({ depot = -1 }) == true and sync.isActive({}) == true)
+  check("isInDepot", sync.isInDepot(nil) == false and sync.isInDepot({ depot = 3 }) == true
+    and sync.isInDepot({ depot = -1 }) == false and sync.isInDepot({}) == false)
   check("sameColor epsilon + index access",
     sync.sameColor(C(1, 0, 0), C(1 + 1e-3, 0, 0)) == true
     and sync.sameColor(C(1, 0, 0), { 1, 0, 0 }) == true

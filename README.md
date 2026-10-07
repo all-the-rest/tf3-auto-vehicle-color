@@ -1,10 +1,12 @@
 # Auto Vehicle Color (Transport Fever 3)
 
 Vehicles automatically take the color of their line. When a vehicle is
-assigned to a line or a line color changes, active vehicles are recolored
-at their next arrival event — no manual repainting, no polling.
+assigned to a line or a line color changes, its vehicles are recolored
+immediately — no manual repainting, no polling.
 
-- Scope: only **active** vehicles (parked/depot vehicles are skipped).
+- Scope: **all** vehicles of the line, depot vehicles included (right
+  after buy+assign the vehicle is still parked, and the depot list reads
+  the same color component).
 - Manual vehicle colors are **overwritten** — the line color wins at the
   next event.
 - Mod ID: `alltherest_auto_vehicle_color`
@@ -25,8 +27,13 @@ Two triggers, zero polling:
    `OnArriveAtStop` (+ cargo events) recolor one vehicle via `syncOne`.
    Covers script-driven and multiplayer-propagated changes.
 
-`update()` only subscribes to engine events (base-game pattern). All
-follow-ups read current engine state and act only on color mismatch.
+Both paths read current engine state and act only on a color mismatch.
+Every no-op logs its reason (`syncOne -> 0 (already-line-color)`,
+`syncLine -> 0/7 (not-on-this-line=7)`), so nothing fails silently.
+
+`update()` only subscribes to engine events (base-game pattern),
+including the hook's own `recolor` event name (`events.lua`) — a game
+script only receives scripting events it has subscribed to.
 
 Why this shape: there is NO engine event for "vehicle assigned" or
 "line color changed" (verified: 0 hits in 1443 base-game script files).
@@ -54,13 +61,14 @@ tools/avc_log.sh                                    dump the mod's game-log line
 lua tests/run.lua
 ```
 
-Pure logic + mocked `api.engine` / `api.cmd`. 38 cases: recolor,
+Pure logic + mocked `api.engine` / `api.cmd`. 52 cases: recolor,
 match-skip, depot-skip, foreign-line-skip, nil-safety, error survival,
 event gating (incl. rejecting invented `line.changed` /
 `api.cmd.SetLine` names), event duck-typing, command→target mapping,
 helpers, `ComponentType` member resolution (camelCase keys are rejected),
-and the `events.lua` contract (the engine subscribes to the hook's event
-name; both sides import the constants).
+the no-op reasons (including the depot case: depot vehicles are
+recolored), and the `events.lua` contract (the engine subscribes to the
+hook's event name; both sides import the constants).
 
 ## In-game verification (still needed)
 
@@ -84,8 +92,12 @@ Unverified in the live game and marked as such:
 1. ~~Install the mod folder as a TF3 mod, start a save.~~ **verified**
    2026-10-07: `Creating entity for GameScript`, `engine script
    subscribed` (all sim pools), `getEntityForGameScript(...) = 342266`.
-2. Buy + assign a vehicle → correct line color immediately.
-3. Change the line color → vehicles follow immediately.
+2. Buy + assign a vehicle → correct line color immediately. (Trams are
+   the test vehicle; the tram is still in the depot at that moment.)
+3. Change the line color → vehicles follow immediately. **open**: the
+   hook's `makeEntitySetColorCmd` notification arrives, but the follow-up
+   logged nothing yet — the reason logging added on 2026-10-07 will name
+   it (`syncEntity -> 0/… (…)`).
 4. Arrival fallback: script-driven changes converge at next stop.
 5. Open the console (`debugPrint`) if behavior differs; likely suspects:
    `TransportVehicle.depot` convention, factory-wrap visibility of

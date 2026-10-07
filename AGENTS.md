@@ -3,7 +3,7 @@
 ## Goal
 
 Vehicles automatically take the color of their line. If a vehicle is
-assigned to a line or a line color changes, active vehicles are recolored
+assigned to a line or a line color changes, its vehicles are recolored
 without manual repainting.
 
 ## Rule 0 — strictly event-driven, NO tick-based polling (user rule)
@@ -92,8 +92,13 @@ without manual repainting.
 
 ## Decisions (user, 2026-10-07)
 
-- Scope: only ACTIVE vehicles (`TransportVehicle.depot` nil/-1); depot
-  vehicles are skipped.
+- Scope: ALL vehicles of the line, depot vehicles included
+  (`TransportVehicle.depot` holds the depot entity while parked, nil/-1
+  on the road). The depot gate was dropped (user, 2026-10-07, confirmed
+  in-game): right after buy+assign the vehicle is still parked
+  (`depot=147161`), so an active-only rule can never make the color
+  visible immediately, and the depot list/vehicle window read the same
+  color component. `sync.isInDepot` is kept for diagnostics only.
 - Manual vehicle colors are overwritten: line color always wins
   (enforced at the next event, manual `setColor` commands are never
   fought synchronously).
@@ -106,6 +111,12 @@ without manual repainting.
   color (vehicles -> line). Unanimity required; mixed colors change
   nothing.
 - Tests: plain `lua tests/run.lua`, mocked `api`, zero dependencies.
+- NO SILENT NO-OPS: every path that does nothing returns a reason
+  (`syncOne` -> `0, "already-line-color" | "not-on-this-line" |
+  "vehicle-has-no-color" | "line-read-failed" …`, `syncLine` ->
+  `0, "reason=count …", total`) and the engine script logs it. Two real
+  bugs (missing event subscription, camelCase ComponentType keys) stayed
+  invisible for hours precisely because a no-op looked like success.
 - modId: `alltherest_auto_vehicle_color`.
 
 ## Workflow
