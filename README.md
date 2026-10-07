@@ -23,14 +23,18 @@ Two triggers, zero polling:
    vehicle(s) are recolored immediately — visible right after buy+assign.
    Commands are never blocked, only observed; without a success callback
    nothing happens (arrival fallback covers it).
-2. **Arrival events (engine script)** — `TransportVehicleSystem` /
-   `OnArriveAtStop` (+ cargo events) are **observed only**. Sending a
-   command while an engine event is dispatched is illegal
-   (`BeginModification: Assertion '!m_betweenChanges' failed`, a fatal
-   error per call — with 1277 vehicles that made the game stutter), and
-   vanilla only sends commands from `update()` or from scripting events.
-   The fallback therefore needs a legal carrier before it can come back
-   (see AGENTS.md decisions).
+2. **One-time initial correction (engine script)** — on the first
+   `update()` of a save, every vehicle of every line is repainted once
+   (`syncAllLines`), so the vehicles that already existed when the save was
+   loaded get their line color too. Claimed through the shared script
+   state, so it runs exactly once per save.
+
+There is **no arrival fallback** (user decision): sending a command while
+an engine event is dispatched is illegal
+(`BeginModification: Assertion '!m_betweenChanges' failed`, a fatal error
+per call — with 1277 vehicles that made the game stutter), and vanilla
+only sends commands from `update()` or from scripting events. Engine
+events are therefore observed (capped log line) but never acted on.
 
 Both paths read current engine state and act only on a color mismatch.
 A vehicle that has never been painted has no `COLOR` component yet, so it
@@ -69,7 +73,7 @@ tools/avc_log.sh                                    dump the mod's game-log line
 lua tests/run.lua
 ```
 
-Pure logic + mocked `api.engine` / `api.cmd`. 53 cases: recolor,
+Pure logic + mocked `api.engine` / `api.cmd`. 59 cases: recolor,
 match-skip, depot-skip, foreign-line-skip, nil-safety, error survival,
 event gating (incl. rejecting invented `line.changed` /
 `api.cmd.SetLine` names), event duck-typing, command→target mapping,
@@ -104,7 +108,8 @@ Unverified in the live game and marked as such:
    **verified** 2026-10-07 (tram, still in the depot at that moment).
 3. ~~Change the line color → vehicles follow immediately.~~ **verified**
    2026-10-07 (`syncEntity` on the line entity, fleet recolored).
-4. Arrival fallback: script-driven changes converge at next stop.
+4. One-time initial correction on save load → existing vehicles corrected
+   (`initial correction: N/M vehicles, L lines`). **open**
 5. Open the console (`debugPrint`) if behavior differs; likely suspects:
    `TransportVehicle.depot` convention, factory-wrap visibility of
    command objects, plugin load order vs. other GUI mods.

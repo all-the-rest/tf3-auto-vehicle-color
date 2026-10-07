@@ -55,8 +55,34 @@ function data()
     return CT
   end
 
+  -- ONE-TIME initial correction (user decision, 2026-10-07): the vehicles
+  -- that already exist when a save is loaded get the color of their line
+  -- once. NOT a sweep: the marker lives in the shared script state, so
+  -- exactly one simulation VM runs it, once per save. Afterwards only
+  -- GUI-observed actions recolor (no arrival fallback: commands are illegal
+  -- during engine events, see the header).
+  local initialPassDone = false
+  local function initialCorrection(state)
+    local okState, st = pcall(function() return state:get() end)
+    if not okState or type(st) ~= "table" then return end
+    if st.initialRecolorDone then return end
+    st.initialRecolorDone = true
+    pcall(function() state:set(st) end) -- claim BEFORE the pass: never twice
+    local s = sync()
+    if not s then return end
+    local CT = componentTypes(s)
+    if not CT then return end
+    local ok, sent, summary, lines, vehicles = pcall(s.syncAllLines, { api = api, componentType = CT })
+    if not ok then
+      log("initial correction failed: ", tostring(sent))
+      return
+    end
+    log("initial correction: ", sent, "/", vehicles, " vehicles, ", lines, " lines (", summary, ")")
+  end
+
   return {
-    -- Subscription only. No game logic, no sweep, no throttle, ever.
+    -- Subscription + the ONE-TIME initial correction. No sweep, no timer,
+    -- no polling: after the first call this only guards the subscription.
     -- (Base-game pattern, e.g. arrivaltracker.script.tl.)
     update = function(_params, state, _dt)
       local ok, subscribed = pcall(function() return state:hasEventSubscriptions() end)
@@ -65,6 +91,10 @@ function data()
           pcall(function() state:subscribeToEvent(name) end)
         end
         log("engine script subscribed")
+      end
+      if not initialPassDone then
+        initialPassDone = true
+        initialCorrection(state)
       end
     end,
 

@@ -34,6 +34,18 @@ local function mock(opts)
             return (opts.lineVehicles or {})[line] or {}
           end,
         },
+        lineSystem = {
+          getLines = function()
+            return opts.lines or {}
+          end,
+          getLinesForPlayer = function(_player)
+            if opts.playerLinesFailed then error("no player lines") end
+            return opts.playerLines or opts.lines or {}
+          end,
+        },
+      },
+      util = {
+        getPlayer = function() return opts.player or 1 end,
       },
       getComponent = function(entity, ct)
         if opts.throwGet then error("boom") end
@@ -192,6 +204,42 @@ do
 
   local s3, sum3, t3 = sync.syncEntity(mock({}), 999)
   check("syncEntity reports unknown entity", s3 == 0 and t3 == 0 and sum3 == "not-a-line-or-line-vehicle")
+end
+
+-- 6d: one-time correction pass over every line
+do
+  local red, blue = C(1, 0, 0), C(0, 0, 1)
+  local ctx = mock({
+    lineColor = { [10] = red, [11] = red },
+    tv = { [100] = { line = 10 }, [101] = { line = 10 }, [200] = { line = 11 } },
+    vehColor = { [100] = blue, [101] = red, [200] = blue },
+    lineVehicles = { [10] = { 100, 101 }, [11] = { 200 } },
+    lines = { 10, 11 },
+  })
+  local sent, summary, lines, vehicles = sync.syncAllLines(ctx)
+  check("syncAllLines corrects every line", sent == 2 and lines == 2 and vehicles == 3
+    and summary == "already-line-color=1 recolored=2")
+  check("syncAllLines commands the right entities",
+    #ctx.sent == 2 and ctx.sent[1].entity == 100 and ctx.sent[2].entity == 200)
+
+  -- falls back to getLines() when the player-scoped read fails
+  local ctx2 = mock({
+    playerLinesFailed = true,
+    lineColor = { [10] = red },
+    tv = { [100] = { line = 10 } },
+    vehColor = { [100] = blue },
+    lineVehicles = { [10] = { 100 } },
+    lines = { 10 },
+  })
+  check("syncAllLines falls back to getLines", (sync.syncAllLines(ctx2)) == 1)
+
+  check("syncAllLines reports no lines", (select(2, sync.syncAllLines(mock({ lines = {} })))) == "no-lines")
+  check("syncAllLines nil-safe", (select(2, sync.syncAllLines(nil))) == "missing-arguments")
+
+  local ctx3 = mock({})
+  ctx3.api.engine.system.lineSystem = nil
+  check("syncAllLines survives a broken line system",
+    (select(2, sync.syncAllLines(ctx3))) == "lines-read-failed")
 end
 
 -- 7: event gate matches base-game pattern, rejects the rest

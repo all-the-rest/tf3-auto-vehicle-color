@@ -8,11 +8,20 @@ without manual repainting.
 
 ## Rule 0 — strictly event-driven, NO tick-based polling (user rule)
 
-- `update()` in the game script exists for ONE purpose only: the
+- `update()` in the game script contains ONLY two things: (a) the
   `state:hasEventSubscriptions()` guard + `state:subscribeToEvent(...)`
   calls (base-game pattern, e.g. `arrivaltracker.script.tl`,
-  `achievements.script.tl`). It must NEVER contain game logic, sweeps,
-  timers, counters, or throttles.
+  `achievements.script.tl`) and (b) the ONE-TIME initial correction on the
+  first call (user decision, 2026-10-07). Nothing else — no repeated
+  sweeps, no timers, no counters, no throttles, no polling.
+- The initial correction runs ONCE PER SAVE: it claims a marker in the
+  shared script state (`state:get()`/`state:set()`, shared across the
+  simulation VMs and saved with the game), then recolors every vehicle of
+  every line (`sync.syncAllLines`). Own lines first
+  (`lineSystem.getLinesForPlayer(api.engine.util.getPlayer())`, verified in
+  vanilla `loan.script.tl`), `lineSystem.getLines()` as fallback (used by
+  engine scripts `achievements.script.tl`, `subvention_util.tl`). It
+  covers the vehicles that already exist when a save is loaded.
 - All sync logic runs in `handleEvent`, triggered ONLY by engine events:
   `TransportVehicleSystem` / `OnArriveAtStop` (param carries
   `vehicleEntity` + `lineEntity`), plus duck-typed params of other
@@ -33,9 +42,8 @@ without manual repainting.
   dispatched BETWEEN engine changes, so our own `recolor` event may send —
   and does (color verified working from that branch).
 - Therefore engine events are OBSERVED, not acted on (capped log line).
-  Re-enabling an arrival fallback requires a legal carrier for the
-  command: either a queued flush in `update()` (Rule 0 amendment needed)
-  or nothing at all.
+  There is NO arrival fallback (user decision, 2026-10-07): after the
+  one-time initial correction, only GUI-observed actions recolor.
 - Rejected approaches (do NOT reintroduce): per-tick/per-N-tick sweeps,
   `os.clock` throttles, revision caches for sweeps, `guiUpdate` polling.
 
@@ -134,10 +142,10 @@ without manual repainting.
   NOT arrival: the correct color has to be visible immediately after
   buy+assign. Verified working 2026-10-07: the tram takes the line color
   right after buy+assign, and a line color change recolors the fleet.
-- The arrival fallback is DISABLED (2026-10-07): commands are illegal
-  during engine events (fatal assertion + stutter). Re-enabling it needs
-  a decision: queued flush in `update()` (Rule 0 amendment) vs. dropping
-  the fallback entirely.
+- Arrival fallback: DROPPED (user decision, 2026-10-07). Instead a
+  ONE-TIME initial correction at session start repaints the existing
+  vehicles; after that only GUI-observed actions recolor. Reason: commands
+  are illegal during engine events (fatal assertion + stutter).
 - Reverse rule (user, 2026-10-07, pending test of forward direction):
   if ALL vehicles on a line share one color, adopt it as the line
   color (vehicles -> line). Unanimity required; mixed colors change

@@ -140,7 +140,7 @@ function M.summarize(reasons)
 end
 
 --- Recolor every vehicle of one line to the line color.
--- @return number of setColor commands sent, reason summary, vehicles seen
+-- @return sent, reason summary, vehicles seen, raw reason counts
 function M.syncLine(context, lineEntity)
   local api = context.api
   if not api or not lineEntity then return 0, "missing-arguments", 0 end
@@ -148,7 +148,7 @@ function M.syncLine(context, lineEntity)
     return api.engine.system.transportVehicleSystem.getLineVehicles(lineEntity)
   end)
   if not ok then return 0, "line-vehicles-read-failed", 0 end
-  if type(vehicles) ~= "table" then return 0, "no-vehicles", 0 end
+  if type(vehicles) ~= "table" then return 0, "no-vehicles", 0, {} end
   local sent, total, reasons = 0, 0, {}
   for _, vehicle in ipairs(vehicles) do
     total = total + 1
@@ -156,15 +156,14 @@ function M.syncLine(context, lineEntity)
     sent = sent + n
     reasons[reason] = (reasons[reason] or 0) + 1
   end
-  if total == 0 then return 0, "no-vehicles", 0 end
-  return sent, M.summarize(reasons), total
+  if total == 0 then return 0, "no-vehicles", 0, reasons end
+  return sent, M.summarize(reasons), total, reasons
 end
 
 --- Classify any entity and recolor accordingly (engine side, where
 -- component reads work). Lines -> whole line; vehicles -> single.
 -- @return number of setColor commands sent, reason summary, vehicles seen
-function M.syncEntity(context, entity)
-  local api, CT = context.api, context.componentType
+function M.syncEntity(context, entity)  local api, CT = context.api, context.componentType
   if not api or not CT or not entity then return 0, "missing-arguments", 0 end
   local okLine, lineComp = pcall(api.engine.getComponent, entity, CT.LINE)
   if okLine and lineComp then
@@ -179,5 +178,43 @@ function M.syncEntity(context, entity)
 end
 
 M.sameColor = sameColor
+
+--- One-time correction pass (user decision, 2026-10-07): recolor every
+-- vehicle of every line once, at the start of a session. Runs exactly
+-- once per save (the engine script claims it through the shared script
+-- state); afterwards only GUI-observed actions recolor.
+-- Own lines first (`getLinesForPlayer`), all lines as a fallback.
+-- @return sent, reason summary, lines seen, vehicles seen
+function M.syncAllLines(context)
+  local api = context and context.api
+  if not api then return 0, "missing-arguments", 0, 0 end
+
+  local lines
+  local okPlayer = pcall(function()
+    lines = api.engine.system.lineSystem.getLinesForPlayer(api.engine.util.getPlayer())
+  end)
+  if not okPlayer or type(lines) ~= "table" then
+    local okAll, all = pcall(function()
+      return api.engine.system.lineSystem.getLines()
+    end)
+    if not okAll or type(all) ~= "table" then return 0, "lines-read-failed", 0, 0 end
+    lines = all
+  end
+
+  local count = 0
+  for _ in ipairs(lines) do count = count + 1 end
+  if count == 0 then return 0, "no-lines", 0, 0 end
+
+  local sent, vehicles, reasons = 0, 0, {}
+  for _, line in ipairs(lines) do
+    local n, _summary, total, lineReasons = M.syncLine(context, line)
+    sent = sent + n
+    vehicles = vehicles + total
+    for reason, hits in pairs(lineReasons or {}) do
+      reasons[reason] = (reasons[reason] or 0) + hits
+    end
+  end
+  return sent, M.summarize(reasons), count, vehicles
+end
 
 return M
