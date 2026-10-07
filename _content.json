@@ -3,6 +3,7 @@
     "files": [
         "auto_vehicle_color/auto_vehicle_color.gs.lua",
         "auto_vehicle_color/auto_vehicle_color.script.lua",
+        "auto_vehicle_color/events.lua",
         "auto_vehicle_color/sync.lua",
         "auto_vehicle_color/gui/hook.res.lua",
         "auto_vehicle_color/gui/hook.script.lua",

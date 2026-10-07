@@ -15,15 +15,10 @@
 function data()
   local MOD = "alltherest_auto_vehicle_color"
 
-  -- DIAGNOSTIC: plain print too, so the line is unambiguous in stdout.txt.
   local function log(...)
-    local parts = { "[AVC]" }
-    for i = 1, select("#", ...) do
-      parts[#parts + 1] = tostring((select(i, ...)))
+    if debugPrint then
+      pcall(debugPrint, "[AVC] ", ...)
     end
-    local msg = table.concat(parts, " ")
-    if print then pcall(print, msg) end
-    if debugPrint then pcall(debugPrint, msg) end
   end
 
   local function loadModule(path)
@@ -37,8 +32,16 @@ function data()
     return { n = select("#", ...), ... }
   end
 
+  -- Shared contract (event id + event name). The engine script subscribes to
+  -- event names, so both sides must read the same constants.
+  local events = loadModule("events.lua")
+
   -- Forward targets to the engine script; it reads + recolors there.
   local function notify(targets)
+    if not events then
+      log("cannot notify: events.lua missing")
+      return
+    end
     for _, t in ipairs(targets) do
       local param = nil
       if t.vehicle ~= nil and t.line ~= nil then
@@ -51,10 +54,11 @@ function data()
         param = { entity = t.maybeLine }
       end
       if param ~= nil then
-        local ok, cmd = pcall(api.cmd.makeScriptingSendEventCmd, "", MOD, "recolor", param)
+        local ok, cmd = pcall(api.cmd.makeScriptingSendEventCmd, "", events.EVENT_ID,
+          events.EVENT_RECOLOR, param)
         if ok and cmd ~= nil then
           pcall(api.cmd.sendCommand, cmd)
-          log("notified engine")
+          log("notified engine (", events.EVENT_RECOLOR, ")")
         else
           log("notify failed")
         end
@@ -132,18 +136,6 @@ function data()
       if not (ok and done) then
         log("prepare: install failed")
       end
-      -- DIAGNOSTIC: does a game script entity for our descriptor exist in
-      -- THIS session? GameScript entities are created only for mods that
-      -- are part of the running session's mod set.
-      local SCRIPT_URI = MOD .. "::/auto_vehicle_color/auto_vehicle_color.gs"
-      local okS, sys = pcall(function() return api.engine.system.gameScriptSystem end)
-      log("probe: gameScriptSystem=", okS and type(sys) or ("ERR " .. tostring(sys)),
-        " engineSystem=", api.engine and type(api.engine.system))
-      local okE, ent = pcall(function()
-        return api.engine.system.gameScriptSystem.getEntityForGameScript(SCRIPT_URI)
-      end)
-      log("probe: getEntityForGameScript(", SCRIPT_URI, ") ok=", okE,
-        " entity=", okE and tostring(ent) or tostring(ent))
     end,
   }
 end

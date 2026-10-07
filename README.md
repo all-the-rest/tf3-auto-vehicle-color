@@ -38,12 +38,14 @@ AGENTS.md                                           rules + verified API ground 
 mod.json                                            modId, revision, scripts
 _metadata/modinfo.json                              browser name/description
 content/auto_vehicle_color/sync.lua                 pure logic (testable)
+content/auto_vehicle_color/events.lua               GUI <-> engine contract (id + event name)
 content/auto_vehicle_color/auto_vehicle_color.gs.lua      game script wiring
 content/auto_vehicle_color/auto_vehicle_color.script.lua engine entry point
 content/auto_vehicle_color/gui/hook.res.lua             react-plugin descriptor
 content/auto_vehicle_color/gui/hook.script.lua          sendCommand wrapper (observe-only)
 content/auto_vehicle_color/gui/watch.lua                command -> targets (testable)
 tests/run.lua                                       headless unit tests
+tools/avc_log.sh                                    dump the mod's game-log lines
 ```
 
 ## Tests (no game needed)
@@ -52,11 +54,12 @@ tests/run.lua                                       headless unit tests
 lua tests/run.lua
 ```
 
-Pure logic + mocked `api.engine` / `api.cmd`. 21 cases: recolor,
+Pure logic + mocked `api.engine` / `api.cmd`. 33 cases: recolor,
 match-skip, depot-skip, foreign-line-skip, nil-safety, error survival,
 event gating (incl. rejecting invented `line.changed` /
 `api.cmd.SetLine` names), event duck-typing, command→target mapping,
-helpers.
+helpers, and the `events.lua` contract (the engine subscribes to the
+hook's event name; both sides import the constants).
 
 ## In-game verification (still needed)
 
@@ -77,7 +80,9 @@ advanced), activate the mod for a save, open the console with `^`/`§`/`
 
 Unverified in the live game and marked as such:
 
-1. Install the mod folder as a TF3 mod, start a save.
+1. ~~Install the mod folder as a TF3 mod, start a save.~~ **verified**
+   2026-10-07: `Creating entity for GameScript`, `engine script
+   subscribed` (all sim pools), `getEntityForGameScript(...) = 342266`.
 2. Buy + assign a vehicle → correct line color immediately.
 3. Change the line color → vehicles follow immediately.
 4. Arrival fallback: script-driven changes converge at next stop.

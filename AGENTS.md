@@ -39,12 +39,37 @@ without manual repainting.
 - Install once (module-load/first-recipe guard); recipe renders nothing.
 - Pure decision logic lives in `gui/watch.lua` (`extractTargets`) and
   MUST stay headless-testable like `sync.lua`.
+- The GUI state CANNOT read components (lazy enum proxies): the hook
+  performs ZERO engine reads and forwards targets to the engine script.
+- GUI -> engine happens ONLY through `api.cmd.makeScriptingSendEventCmd`.
+  Event id and event name live in `content/auto_vehicle_color/events.lua`
+  and are imported by BOTH sides — never hardcoded. Rationale: the
+  engine subscribes to the event NAME (see API ground truth); a literal
+  in one file only is exactly the bug that cost a debugging session.
 
 ## API ground truth (verified against the installed game, build ~40408)
 - Game script wiring: `content/*/*.gs.lua` descriptor with
   `updateScript` / `handleEventScript` pointing at
   `<name>.script@<fn>`; signatures `update(userParams, state, dt)` and
   `handleEvent(userParams, state, src, id, name, param)`.
+  (`fileName` resolves relative to the descriptor's own directory, like
+  `just_more_weather_1::/rct/service.gs` -> `service.script@update`.)
+- Scripting events GUI -> engine: `api.cmd.makeScriptingSendEventCmd(
+  src, id, name, param)`. The recipient receives it as `handleEvent(...,
+  id, name, param)` ONLY IF it called `state:subscribeToEvent(name)` —
+  the 3rd argument, NOT `id`. Base-game proof:
+  `game_time.script.tl` subscribes `"SetMode"`/`"SkipPhase"` and then
+  filters `if id == "GameTime" and name == "SetMode"`. Third-party
+  proof: `just_more_weather_1::/rct/service.script.lua` subscribes its
+  `EV_*` names (id `"RealClockService"`).
+- GameScript entities are created ONLY for mods in the running session's
+  mod set (`crash_dump` log: `Creating entity for GameScript <mod>::/…`).
+- Diagnostics from the GUI state: `api.engine.system.gameScriptSystem
+  .getEntityForGameScript("<modId>::/<path>.gs")` returns the game
+  script entity (proven: 342266) — usable to check wiring at runtime.
+- Both `print` and `debugPrint` from engine-side mod game scripts reach
+  `crash_dump/stdout.txt`; `print` writes a bare line, `debugPrint` a
+  timestamped `MESSAGE` line.
 - Engine reads: `api.engine.system.lineSystem.getLines()`,
   `api.engine.system.transportVehicleSystem.getLineVehicles(line)`,
   `api.engine.getComponent(entity, api.type.ComponentType.COLOR |

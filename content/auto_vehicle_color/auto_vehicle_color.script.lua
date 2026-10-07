@@ -2,25 +2,13 @@
 -- STRICTLY EVENT-DRIVEN (AGENTS.md Rule 0): update() only subscribes,
 -- all logic runs in handleEvent. The pure logic lives in sync.lua so it
 -- can be unit tested headless.
-
--- DIAGNOSTIC (remove later): proves the module chunk is required at all.
-print("[AVC] probe: script.lua chunk loaded")
+local events = ug_require("alltherest_auto_vehicle_color::/auto_vehicle_color/events.lua")
 
 function data()
-  local SUBSCRIBE_EVENTS = { "OnArriveAtStop", "OnCargoLoaded", "OnCargoUnloaded" }
-
-  print("[AVC] probe: script data() called")
-
-  -- Plain print (not only debugPrint): proven to reach stdout.txt from
-  -- engine-side mod game scripts.
   local function log(...)
-    local parts = { "[AVC]" }
-    for i = 1, select("#", ...) do
-      parts[#parts + 1] = tostring((select(i, ...)))
+    if debugPrint then
+      pcall(debugPrint, "[AVC] ", ...)
     end
-    local msg = table.concat(parts, " ")
-    if print then pcall(print, msg) end
-    if debugPrint then pcall(debugPrint, msg) end
   end
 
   local function componentTypes()
@@ -33,24 +21,17 @@ function data()
   local function loadSync()
     local ok, mod = pcall(ug_require, "alltherest_auto_vehicle_color::/auto_vehicle_color/sync.lua")
     if ok and mod then return mod end
-    log("probe: sync.lua load failed:", tostring(mod))
+    log("sync.lua load failed: ", tostring(mod))
     return nil
   end
-
-  local announced = false
-  local eventLogs = 0
 
   return {
     -- Subscription only. No game logic, no sweep, no throttle, ever.
     -- (Base-game pattern, e.g. arrivaltracker.script.tl.)
     update = function(_params, state, _dt)
       local ok, subscribed = pcall(function() return state:hasEventSubscriptions() end)
-      if not announced then
-        announced = true
-        log("probe: update() called, hasEventSubscriptions ok=", ok, " value=", subscribed)
-      end
       if ok and not subscribed then
-        for _, name in ipairs(SUBSCRIBE_EVENTS) do
+        for _, name in ipairs(events.SUBSCRIBE_EVENTS) do
           pcall(function() state:subscribeToEvent(name) end)
         end
         log("engine script subscribed")
@@ -58,10 +39,6 @@ function data()
     end,
 
     handleEvent = function(_params, _state, _src, id, name, param)
-      if eventLogs < 20 then
-        eventLogs = eventLogs + 1
-        log("probe: handleEvent id=", id, " name=", name)
-      end
       local sync = loadSync()
       if not sync then return end
       local CT = componentTypes()
@@ -69,28 +46,31 @@ function data()
       local ctx = { api = api, componentType = CT }
       -- Our GUI hook's scripting event: { vehicle=, line= } or { line= }
       -- or { entity= }. Reads happen HERE (engine state), never in GUI.
-      if id == "alltherest_auto_vehicle_color" and type(param) == "table" then
-        log("hook event: ", name)
+      -- Received only because "recolor" is subscribed (events.lua).
+      if id == events.EVENT_ID and name == events.EVENT_RECOLOR and type(param) == "table" then
         if param.vehicle ~= nil and param.line ~= nil then
           local okTv, tv = pcall(api.engine.getComponent, param.vehicle, CT.TransportVehicle)
-          log("decision: tvLine=", okTv and tv and tv.line or "n/a",
+          log("decision: vehicle=", param.vehicle, " tvLine=", okTv and tv and tv.line or "n/a",
             " depot=", okTv and tv and tostring(tv.depot) or "n/a")
           local ok, n = pcall(sync.syncOne, ctx, param.vehicle, param.line)
-          log("syncOne -> ", ok and n or ("ERR " .. tostring(n)))
           if ok and n == 1 then
             log("recolored vehicle ", param.vehicle, " to line ", param.line, " (hook)")
+          elseif not ok then
+            log("syncOne error: ", tostring(n))
           end
         elseif param.line ~= nil then
           local ok, n = pcall(sync.syncLine, ctx, param.line)
-          log("syncLine -> ", ok and n or ("ERR " .. tostring(n)))
           if ok and n > 0 then
             log("recolored ", n, " vehicles to line ", param.line, " (hook)")
+          elseif not ok then
+            log("syncLine error: ", tostring(n))
           end
         elseif param.entity ~= nil then
           local ok, n = pcall(sync.syncEntity, ctx, param.entity)
-          log("syncEntity -> ", ok and n or ("ERR " .. tostring(n)))
           if ok and n > 0 then
             log("recolored ", n, " via entity ", param.entity, " (hook)")
+          elseif not ok then
+            log("syncEntity error: ", tostring(n))
           end
         end
         return

@@ -4,6 +4,7 @@
 
 local sync = dofile("content/auto_vehicle_color/sync.lua")
 local watch = dofile("content/auto_vehicle_color/gui/watch.lua")
+local events = dofile("content/auto_vehicle_color/events.lua")
 
 local passed, failed = 0, 0
 local function check(name, cond)
@@ -220,6 +221,49 @@ do
   check("syncEntity classifies vehicle", sync.syncEntity(ctx2, 100) == 1)
   check("syncEntity ignores unknown", sync.syncEntity(ctx2, 999) == 0)
   check("syncEntity nil-safe", sync.syncEntity(ctx2, nil) == 0)
+end
+
+-- events.lua: the GUI <-> engine contract must not drift.
+-- A game script only receives scripting events it has subscribed to, so the
+-- hook's event name MUST be in the engine's subscription list. Both sides
+-- read events.lua; this guards the invariant itself.
+do
+  local subscribed = {}
+  for _, name in ipairs(events.SUBSCRIBE_EVENTS) do subscribed[name] = true end
+  check("events: recolor is subscribed", subscribed[events.EVENT_RECOLOR] == true)
+  check("events: arrival/cargo fallback subscribed",
+    subscribed.OnArriveAtStop and subscribed.OnCargoLoaded and subscribed.OnCargoUnloaded)
+  check("events: id and name are non-empty strings",
+    type(events.EVENT_ID) == "string" and #events.EVENT_ID > 0
+    and type(events.EVENT_RECOLOR) == "string" and #events.EVENT_RECOLOR > 0)
+  check("events: subscribe list has no duplicates",
+    (function()
+      local seen, n = {}, 0
+      for _, name in ipairs(events.SUBSCRIBE_EVENTS) do
+        if seen[name] then return false end
+        seen[name] = true
+        n = n + 1
+      end
+      return n == #events.SUBSCRIBE_EVENTS
+    end)())
+
+  -- The engine script and the GUI hook must both take the constants from
+  -- events.lua instead of hardcoding them again.
+  local function reads(path, needles)
+    local f = assert(io.open(path, "r"))
+    local text = f:read("*a")
+    f:close()
+    for _, needle in ipairs(needles) do
+      if not text:find(needle, 1, true) then return false, needle end
+    end
+    return true
+  end
+  check("engine script uses events.lua constants",
+    reads("content/auto_vehicle_color/auto_vehicle_color.script.lua",
+      { "events.SUBSCRIBE_EVENTS", "events.EVENT_ID", "events.EVENT_RECOLOR" }))
+  check("gui hook uses events.lua constants",
+    reads("content/auto_vehicle_color/gui/hook.script.lua",
+      { "events.EVENT_ID", "events.EVENT_RECOLOR" }))
 end
 
 print(string.format("--- %d passed, %d failed ---", passed, failed))
