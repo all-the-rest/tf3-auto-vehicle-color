@@ -5,9 +5,16 @@
             "role": "CREATOR"
         }
     ],
-    "description": "Automatically paints vehicles in their line color. Buy or assign a vehicle and it takes the line color immediately; changing the line color recolors the whole fleet, depot vehicles included. Vehicles from an existing save are corrected once when the save is loaded.",
+    "description": "Färbt Fahrzeuge automatisch in ihrer Linienfarbe. Beim Spielstart werden einmal alle Fahrzeuge aller Linien korrigiert; neu gekaufte oder zugewiesene Fahrzeuge übernehmen die Linienfarbe sofort, und ein Linienfarbwechsel färbt die ganze Flotte um – Depotfahrzeuge eingeschlossen.",
+    "localization": {
+        "en": {
+            "name": "Auto Vehicle Color",
+            "summary": "Vehicle color follows the line color automatically.",
+            "description": "Automatically paints vehicles in their line color. When a save is loaded, all vehicles of all lines are corrected once; newly bought or assigned vehicles take the line color immediately, and changing the line color recolors the whole fleet, depot vehicles included."
+        }
+    },
     "name": "Auto Vehicle Color",
-    "summary": "Vehicle color follows the line color automatically.",
+    "summary": "Fahrzeugfarbe folgt automatisch der Linienfarbe.",
     "tags": [
         "Script Mod"
     ]
