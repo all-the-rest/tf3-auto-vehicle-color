@@ -61,8 +61,10 @@ without manual repainting.
 - Install once (module-load/first-recipe guard); recipe renders nothing.
 - Pure decision logic lives in `gui/watch.lua` (`extractTargets`) and
   MUST stay headless-testable like `sync.lua`.
-- The GUI state CANNOT read components (lazy enum proxies): the hook
-  performs ZERO engine reads and forwards targets to the engine script.
+- The hook performs ZERO engine reads and forwards targets to the engine
+  script. (Earlier "the GUI state cannot read components" was WRONG: that
+  failure was the camelCase ComponentType key, not the GUI state. Not
+  re-verified since the bridge works — do not "fix" it from that claim.)
 - GUI -> engine happens ONLY through `api.cmd.makeScriptingSendEventCmd`.
   Event id and event name live in `content/auto_vehicle_color/events.lua`
   and are imported by BOTH sides — never hardcoded. Rationale: the
