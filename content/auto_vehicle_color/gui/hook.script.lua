@@ -1,24 +1,25 @@
 -- Auto Vehicle Color: GUI hook (runs inside Transport Fever 3 GUI state).
--- Installs ONCE per GUI lifetime: wraps api.cmd factories + sendCommand
--- (technique proven by TPF3MP's guard.lua) and issues setColor follow-ups
--- ONLY after watched commands commit successfully. No ticks, no polling,
--- commands are never blocked or altered, only observed.
+-- Installed ONCE via prepare() (react-replacement-config, replaces no
+-- recipe): wraps api.cmd factories + sendCommand (technique proven by
+-- TPF3MP's guard.lua) and issues setColor follow-ups ONLY after watched
+-- commands commit successfully. No ticks, no polling, commands are never
+-- blocked or altered, only observed.
 --
--- Loaded via gui/hook.res.lua (react-plugin). The recipe installs the
--- wrapper on first run and renders nothing.
+-- Diagnostics: watch the ingame console (key below ESC) or stdout.txt.
 
 function data()
   local MOD = "alltherest_auto_vehicle_color"
-  local installed = false
-  local kinds = {} -- command object -> factory name
-  local calls = {} -- command object -> factory args {n=...}
-  -- Loop safety by construction: our follow-ups are always sent WITHOUT
-  -- a callback, and callback-less commands pass through untouched (see
-  -- below), so they can never re-enter executeTargets.
+
+  local function log(...)
+    if debugPrint then
+      pcall(debugPrint, "[AVC] ", ...)
+    end
+  end
 
   local function loadModule(path)
     local ok, mod = pcall(ug_require, MOD .. "::/auto_vehicle_color/" .. path)
     if ok and mod then return mod end
+    log("load failed: " .. path)
     return nil
   end
 
@@ -34,10 +35,17 @@ function data()
   end
 
   local function executeTargets(targets)
-    local watch = loadModule("gui/watch.lua")
     local sync = loadModule("sync.lua")
     local ctx = context()
-    if not sync or not ctx then return end
+    if not sync or not ctx then return 0 end
+    local recolored = 0
+    local function recolor(vehicle, line)
+      local ok, n = pcall(sync.syncOne, ctx, vehicle, line)
+      if ok and n == 1 then
+        recolored = recolored + 1
+        log("recolored vehicle ", vehicle, " to line ", line)
+      end
+    end
     local lineVehiclesOf = {}
     for _, t in ipairs(targets) do
       if t.vehicle ~= nil then
@@ -47,7 +55,9 @@ function data()
           if ok and tv then line = tv.line end
         end
         if line ~= nil then
-          pcall(sync.syncOne, ctx, t.vehicle, line)
+          recolor(t.vehicle, line)
+        else
+          log("no line for vehicle ", t.vehicle, " (depot/unassigned?)")
         end
       elseif t.lineVehiclesOf ~= nil then
         lineVehiclesOf[#lineVehiclesOf + 1] = t.lineVehiclesOf
@@ -58,7 +68,7 @@ function data()
         else
           local okTv, tv = pcall(api.engine.getComponent, t.maybeLine, ctx.componentType.TransportVehicle)
           if okTv and tv and tv.line then
-            pcall(sync.syncOne, ctx, t.maybeLine, tv.line)
+            recolor(t.maybeLine, tv.line)
           end
         end
       end
@@ -69,38 +79,42 @@ function data()
       end)
       if ok and type(vehicles) == "table" then
         for _, vehicle in ipairs(vehicles) do
-          pcall(sync.syncOne, ctx, vehicle, line)
+          recolor(vehicle, line)
         end
       end
     end
+    return recolored
   end
 
-  local function install()
-    if installed or not api or not api.cmd then return false end
-    if api.cmd.sendCommand == nil then return false end
+  local function install(cmd)
     local watch = loadModule("gui/watch.lua")
     if not watch then return false end
+    local kinds = {} -- command object -> factory name
+    local calls = {} -- command object -> factory args {n=...}
 
     -- Wrap factories to record kind + args per command object.
-    for name, factory in pairs(api.cmd) do
+    local wrapped = 0
+    for name, factory in pairs(cmd) do
       if type(name) == "string" and name:match("^make.+Cmd$") and type(factory) == "function" then
         local orig = factory
-        api.cmd[name] = function(...)
-          local cmd = orig(...)
-          if cmd ~= nil and (type(cmd) == "table" or type(cmd) == "userdata") then
-            kinds[cmd] = name
-            if watch.WATCHED[name] then calls[cmd] = packArgs(...) end
+        cmd[name] = function(...)
+          local made = orig(...)
+          if made ~= nil and (type(made) == "table" or type(made) == "userdata") then
+            kinds[made] = name
+            if watch.WATCHED[name] then calls[made] = packArgs(...) end
           end
-          return cmd
+          return made
         end
+        wrapped = wrapped + 1
       end
     end
 
-    local origSend = api.cmd.sendCommand
-    api.cmd.sendCommand = function(command, callback, ...)
+    local origSend = cmd.sendCommand
+    cmd.sendCommand = function(command, callback, ...)
       local kind = kinds[command]
       -- Pass through untouched: unknown, unwatched, or callback-less
-      -- (incl. our own follow-ups, which never carry a callback).
+      -- (incl. our own follow-ups, which never carry a callback, so they
+      -- can never re-enter executeTargets: loop-safe by construction).
       if kind == nil or not watch.WATCHED[kind] or type(callback) ~= "function" then
         return origSend(command, callback, ...)
       end
@@ -108,28 +122,35 @@ function data()
       local inner = callback
       callback = function(result, success, ...)
         if success then
+          log("committed: ", kind)
           local targets = watch.extractTargets(kind, args, result)
           if #targets > 0 then
             -- Follow-ups read CURRENT engine state and act only on
             -- mismatch (syncOne), so a failed premise self-corrects.
             pcall(executeTargets, targets)
           end
+        else
+          log("failed (ignored): ", kind)
         end
         return inner(result, success, ...)
       end
       return origSend(command, callback, ...)
     end
 
-    installed = true
+    log("hook installed (", wrapped, " factories wrapped)")
     return true
   end
 
   return {
-    -- Recipe body: install once, render nothing. One boolean check per
-    -- frame afterwards; no game logic, no polling (Rule 0).
-    installHook = function()
-      pcall(install)
-      return nil
+    prepare = function(_replacementApi)
+      if not api or not api.cmd or api.cmd.sendCommand == nil then
+        log("prepare: no api.cmd, hook NOT installed")
+        return
+      end
+      local ok, done = pcall(install, api.cmd)
+      if not (ok and done) then
+        log("prepare: install failed")
+      end
     end,
   }
 end

@@ -5,6 +5,12 @@
 function data()
   local SUBSCRIBE_EVENTS = { "OnArriveAtStop", "OnCargoLoaded", "OnCargoUnloaded" }
 
+  local function log(...)
+    if debugPrint then
+      pcall(debugPrint, "[AVC] ", ...)
+    end
+  end
+
   local function componentTypes()
     if api and api.type and api.type.ComponentType then
       return api.type.ComponentType
@@ -27,6 +33,7 @@ function data()
         for _, name in ipairs(SUBSCRIBE_EVENTS) do
           pcall(function() state:subscribeToEvent(name) end)
         end
+        log("engine script subscribed")
       end
     end,
 
@@ -42,7 +49,10 @@ function data()
       if vehicle and line then
         local CT = componentTypes()
         if CT then
-          pcall(sync.syncOne, { api = api, componentType = CT }, vehicle, line)
+          local ok, n = pcall(sync.syncOne, { api = api, componentType = CT }, vehicle, line)
+          if ok and n == 1 then
+            log("recolored vehicle ", vehicle, " to line ", line, " (event ", name, ")")
+          end
         end
       end
     end,
