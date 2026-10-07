@@ -15,10 +15,15 @@
 function data()
   local MOD = "alltherest_auto_vehicle_color"
 
+  -- DIAGNOSTIC: plain print too, so the line is unambiguous in stdout.txt.
   local function log(...)
-    if debugPrint then
-      pcall(debugPrint, "[AVC] ", ...)
+    local parts = { "[AVC]" }
+    for i = 1, select("#", ...) do
+      parts[#parts + 1] = tostring((select(i, ...)))
     end
+    local msg = table.concat(parts, " ")
+    if print then pcall(print, msg) end
+    if debugPrint then pcall(debugPrint, msg) end
   end
 
   local function loadModule(path)
@@ -127,6 +132,18 @@ function data()
       if not (ok and done) then
         log("prepare: install failed")
       end
+      -- DIAGNOSTIC: does a game script entity for our descriptor exist in
+      -- THIS session? GameScript entities are created only for mods that
+      -- are part of the running session's mod set.
+      local SCRIPT_URI = MOD .. "::/auto_vehicle_color/auto_vehicle_color.gs"
+      local okS, sys = pcall(function() return api.engine.system.gameScriptSystem end)
+      log("probe: gameScriptSystem=", okS and type(sys) or ("ERR " .. tostring(sys)),
+        " engineSystem=", api.engine and type(api.engine.system))
+      local okE, ent = pcall(function()
+        return api.engine.system.gameScriptSystem.getEntityForGameScript(SCRIPT_URI)
+      end)
+      log("probe: getEntityForGameScript(", SCRIPT_URI, ") ok=", okE,
+        " entity=", okE and tostring(ent) or tostring(ent))
     end,
   }
 end

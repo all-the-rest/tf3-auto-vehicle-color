@@ -66,6 +66,10 @@ Install (symlinked, no copy step — repo edits apply after game restart):
 ln -s ~/dev/tf3-auto-vehicle-color "<TF3-mods>/alltherest_auto_vehicle_color"
 ```
 
+After a restart + save load, `sh tools/avc_log.sh` prints the mod-relevant
+lines of the newest game log (`[AVC]` probes, game-script wiring, load
+errors) — no need to scroll the in-game console.
+
 Then: enable debug mode (`debugMode = true` in the game's `settings.lua`
 (`Steam/userdata/<steamid>/<appid>/local/`), or game settings →
 advanced), activate the mod for a save, open the console with `^`/`§`/`
