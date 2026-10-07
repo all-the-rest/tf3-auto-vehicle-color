@@ -73,8 +73,14 @@ without manual repainting.
 - Engine reads: `api.engine.system.lineSystem.getLines()`,
   `api.engine.system.transportVehicleSystem.getLineVehicles(line)`,
   `api.engine.getComponent(entity, api.type.ComponentType.COLOR |
-  TRANSPORT_VEHICLE)`. (`COLOR : ComponentType` confirmed in
-  `api/tealdef`.)
+  TRANSPORT_VEHICLE)`.
+- `ComponentType` members are UPPER_SNAKE (`COLOR`, `TRANSPORT_VEHICLE`,
+  `LINE`, `TOWN`, …; `enum ComponentType` in
+  `api/tealdef/api/engine.d.tl`). A camelCase key (`.Color`) evaluates to
+  nil, so `getComponent(entity, nil)` throws "Error decoding argument #3"
+  and EVERY read silently becomes a no-op — no recolor, no error, no
+  log. Guarded by `sync.resolveComponentTypes()`, which returns the
+  missing member name instead of nil values.
 - Recolor: `api.cmd.sendCommand(api.cmd.makeEntitySetColorCmd(entity,
   color))` — same call the vanilla vehicle window uses
   (`vehicle_eow.script.tl`). No callback needed.

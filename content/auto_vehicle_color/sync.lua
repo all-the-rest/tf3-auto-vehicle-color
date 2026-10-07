@@ -6,10 +6,41 @@
 --   context.api.engine.getComponent(entity, componentType)
 --   context.api.cmd.makeEntitySetColorCmd(entity, color)
 --   context.api.cmd.sendCommand(cmd)
---   context.componentType.Color / .TransportVehicle
+--   context.componentType.COLOR / .TRANSPORT_VEHICLE / .LINE
+--
+-- ComponentType member names are UPPER_SNAKE (verified in
+-- api/tealdef/api/engine.d.tl, `enum ComponentType`). A camelCase key
+-- (`.Color`) yields nil, makes getComponent fail with "Error decoding
+-- argument #3" and silently turns every read into a no-op — that was a
+-- real bug, so the keys live in COMPONENT_KEYS and are resolved via
+-- resolveComponentTypes() instead of being indexed ad hoc.
 local M = {}
 
 local EPS = 1e-2 -- same tolerance class as vanilla UI color handling
+
+local COMPONENT_KEYS = { "COLOR", "TRANSPORT_VEHICLE", "LINE" }
+
+--- Resolve the ComponentType members this mod needs.
+-- @param componentTypeEnum api.type.ComponentType (or a mock)
+-- @return CT table, or nil plus the name of the first missing member
+function M.resolveComponentTypes(componentTypeEnum)
+  local kind = type(componentTypeEnum)
+  if kind ~= "table" and kind ~= "userdata" then
+    return nil, "api.type.ComponentType is a " .. kind
+  end
+  local CT = {}
+  for i = 1, #COMPONENT_KEYS do
+    local key = COMPONENT_KEYS[i]
+    local value = componentTypeEnum[key]
+    if value == nil then return nil, key end
+    CT[key] = value
+  end
+  return CT
+end
+
+function M.componentKeys()
+  return COMPONENT_KEYS
+end
 
 local function channel(c, k)
   if type(c) == "table" then return c[k] or c[({ x = 1, y = 2, z = 3 })[k]] or 0 end
@@ -59,14 +90,14 @@ function M.syncOne(context, vehicleEntity, lineEntity)
   local api, CT = context.api, context.componentType
   if not api or not CT or not vehicleEntity or not lineEntity then return 0 end
 
-  local okLine, lineComp = pcall(api.engine.getComponent, lineEntity, CT.Color)
+  local okLine, lineComp = pcall(api.engine.getComponent, lineEntity, CT.COLOR)
   local lineColor = okLine and lineComp and lineComp.color or nil
   if not lineColor then return 0 end
 
-  local okTv, tv = pcall(api.engine.getComponent, vehicleEntity, CT.TransportVehicle)
+  local okTv, tv = pcall(api.engine.getComponent, vehicleEntity, CT.TRANSPORT_VEHICLE)
   if not (okTv and tv and tv.line == lineEntity and isActive(tv)) then return 0 end
 
-  local okVeh, vehComp = pcall(api.engine.getComponent, vehicleEntity, CT.Color)
+  local okVeh, vehComp = pcall(api.engine.getComponent, vehicleEntity, CT.COLOR)
   local vehColor = okVeh and vehComp and vehComp.color or nil
   if vehColor and not sameColor(vehColor, lineColor) then
     local okCmd = pcall(function()
@@ -106,7 +137,7 @@ function M.syncEntity(context, entity)
   if okLine and lineComp then
     return M.syncLine(context, entity)
   end
-  local okTv, tv = pcall(api.engine.getComponent, entity, CT.TransportVehicle)
+  local okTv, tv = pcall(api.engine.getComponent, entity, CT.TRANSPORT_VEHICLE)
   if okTv and tv and tv.line then
     return M.syncOne(context, entity, tv.line)
   end

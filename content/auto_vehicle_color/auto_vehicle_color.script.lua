@@ -5,17 +5,22 @@
 local events = ug_require("alltherest_auto_vehicle_color::/auto_vehicle_color/events.lua")
 
 function data()
+  local fallbackNotes = 0
+
   local function log(...)
     if debugPrint then
       pcall(debugPrint, "[AVC] ", ...)
     end
   end
 
-  local function componentTypes()
-    if api and api.type and api.type.ComponentType then
-      return api.type.ComponentType
+  local function componentTypes(sync)
+    local enum = api and api.type and api.type.ComponentType
+    local CT, missing = sync.resolveComponentTypes(enum)
+    if not CT then
+      log("ComponentType member missing: ", tostring(missing))
+      return nil
     end
-    return nil
+    return CT
   end
 
   local function loadSync()
@@ -41,7 +46,7 @@ function data()
     handleEvent = function(_params, _state, _src, id, name, param)
       local sync = loadSync()
       if not sync then return end
-      local CT = componentTypes()
+      local CT = componentTypes(sync)
       if not CT then return end
       local ctx = { api = api, componentType = CT }
       -- Our GUI hook's scripting event: { vehicle=, line= } or { line= }
@@ -49,14 +54,15 @@ function data()
       -- Received only because "recolor" is subscribed (events.lua).
       if id == events.EVENT_ID and name == events.EVENT_RECOLOR and type(param) == "table" then
         if param.vehicle ~= nil and param.line ~= nil then
-          local okTv, tv = pcall(api.engine.getComponent, param.vehicle, CT.TransportVehicle)
-          log("decision: vehicle=", param.vehicle, " tvLine=", okTv and tv and tv.line or "n/a",
-            " depot=", okTv and tv and tostring(tv.depot) or "n/a")
+          local okTv, tv = pcall(api.engine.getComponent, param.vehicle, CT.TRANSPORT_VEHICLE)
+          log("decision: vehicle=", param.vehicle, " targetLine=", param.line,
+            " tvLine=", okTv and tv and tv.line or "n/a",
+            " depot=", okTv and tv and tostring(tv.depot) or "n/a",
+            " tvErr=", (not okTv) and tostring(tv) or "-")
           local ok, n = pcall(sync.syncOne, ctx, param.vehicle, param.line)
+          log("syncOne -> ", ok and n or ("ERR " .. tostring(n)))
           if ok and n == 1 then
             log("recolored vehicle ", param.vehicle, " to line ", param.line, " (hook)")
-          elseif not ok then
-            log("syncOne error: ", tostring(n))
           end
         elseif param.line ~= nil then
           local ok, n = pcall(sync.syncLine, ctx, param.line)
@@ -85,6 +91,13 @@ function data()
         local ok, n = pcall(sync.syncOne, ctx, vehicle, line)
         if ok and n == 1 then
           log("recolored vehicle ", vehicle, " to line ", line, " (event ", name, ")")
+        elseif not ok then
+          log("event ", name, ": syncOne error ", tostring(n))
+        elseif fallbackNotes < 5 then
+          -- DIAGNOSTIC: why the arrival fallback did nothing (depot gate,
+          -- colors already equal, unreadable components).
+          fallbackNotes = fallbackNotes + 1
+          log("event ", name, ": nothing to do (vehicle=", vehicle, " line=", line, ")")
         end
       end
     end,

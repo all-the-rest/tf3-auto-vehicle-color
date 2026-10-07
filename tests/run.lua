@@ -17,7 +17,8 @@ local function check(name, cond)
   end
 end
 
-local CT = { Color = 1, TransportVehicle = 2 }
+-- Verified member names: UPPER_SNAKE (api/tealdef/api/engine.d.tl).
+local CT = { COLOR = 1, TRANSPORT_VEHICLE = 2, LINE = 3 }
 
 local function C(x, y, z) return { x = x, y = y, z = z } end
 
@@ -36,12 +37,12 @@ local function mock(opts)
       },
       getComponent = function(entity, ct)
         if opts.throwGet then error("boom") end
-        if ct == CT.Color then
+        if ct == CT.COLOR then
           local c = (opts.lineColor or {})[entity] or (opts.vehColor or {})[entity]
           if c then return { color = c } end
           return nil
         end
-        if ct == CT.TransportVehicle then
+        if ct == CT.TRANSPORT_VEHICLE then
           return (opts.tv or {})[entity]
         end
         return nil
@@ -200,7 +201,7 @@ do
     lineVehicles = { [10] = { 100 } },
   })
   ctx2.api.engine.getComponent = function(entity, ct)
-    if ct == CT.Color then
+    if ct == CT.COLOR then
       if entity == 10 then return { color = red } end
       if entity == 100 then return { color = blue } end
       return nil
@@ -209,18 +210,43 @@ do
       if entity == 10 then return { stops = {} } end
       return nil
     end
-    if ct == CT.TransportVehicle then
+    if ct == CT.TRANSPORT_VEHICLE then
       if entity == 100 then return { line = 10 } end
       return nil
     end
     return nil
   end
-  local CTLINE = { Color = CT.Color, TransportVehicle = CT.TransportVehicle, LINE = 99 }
+  local CTLINE = { COLOR = CT.COLOR, TRANSPORT_VEHICLE = CT.TRANSPORT_VEHICLE, LINE = 99 }
   ctx2.componentType = CTLINE
   check("syncEntity classifies line", sync.syncEntity(ctx2, 10) == 1)
   check("syncEntity classifies vehicle", sync.syncEntity(ctx2, 100) == 1)
   check("syncEntity ignores unknown", sync.syncEntity(ctx2, 999) == 0)
   check("syncEntity nil-safe", sync.syncEntity(ctx2, nil) == 0)
+end
+
+-- sync.lua: ComponentType member resolution (the camelCase bug).
+-- `api.type.ComponentType.Color` is nil -> getComponent(entity, nil) fails
+-- with "Error decoding argument #3" and every read silently returns 0.
+do
+  local ok, missing = sync.resolveComponentTypes({ Color = 1, TransportVehicle = 2 })
+  check("resolveComponentTypes rejects camelCase keys", ok == nil and missing == "COLOR")
+
+  local CTok = sync.resolveComponentTypes({
+    COLOR = 10, TRANSPORT_VEHICLE = 11, LINE = 12, TOWN = 13,
+  })
+  check("resolveComponentTypes resolves UPPER_SNAKE keys",
+    type(CTok) == "table" and CTok.COLOR == 10 and CTok.TRANSPORT_VEHICLE == 11 and CTok.LINE == 12)
+
+  local userdataLike = setmetatable({}, { __index = function(_, k)
+    return ({ COLOR = 10, TRANSPORT_VEHICLE = 11, LINE = 12 })[k]
+  end })
+  check("resolveComponentTypes works through an __index proxy",
+    type(sync.resolveComponentTypes(userdataLike)) == "table")
+
+  check("resolveComponentTypes nil-safe",
+    sync.resolveComponentTypes(nil) == nil)
+  check("componentKeys are the verified member names",
+    table.concat(sync.componentKeys(), ",") == "COLOR,TRANSPORT_VEHICLE,LINE")
 end
 
 -- events.lua: the GUI <-> engine contract must not drift.
