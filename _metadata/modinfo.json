@@ -5,7 +5,7 @@
             "role": "CREATOR"
         }
     ],
-    "description": "Automatically paints vehicles in their line color. When a vehicle is assigned to a line or a line color changes, active vehicles are recolored on the next simulation tick.",
+    "description": "Automatically paints vehicles in their line color. Buy or assign a vehicle and it takes the line color immediately; changing the line color recolors the whole fleet, depot vehicles included. Vehicles from an existing save are corrected once when the save is loaded.",
     "name": "Auto Vehicle Color",
     "summary": "Vehicle color follows the line color automatically.",
     "tags": [
