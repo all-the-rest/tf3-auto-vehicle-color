@@ -60,10 +60,10 @@ helpers.
 
 ## In-game verification (still needed)
 
-Install (manual, mirrors `mods/release/urbangames_sandbox` layout):
+Install (symlinked, no copy step — repo edits apply after game restart):
 
 ```sh
-cp -r . "/Users/florianreisinger/Library/Application Support/Steam/steamapps/common/Transport Fever 3/mods/alltherest_auto_vehicle_color"
+ln -s ~/dev/tf3-auto-vehicle-color "/Users/florianreisinger/Library/Application Support/Steam/steamapps/common/Transport Fever 3/mods/alltherest_auto_vehicle_color"
 ```
 
 Then: enable debug mode (`debugMode = true` in
