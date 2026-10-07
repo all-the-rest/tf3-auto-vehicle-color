@@ -20,8 +20,22 @@ without manual repainting.
   `extractVehicleLine`.
 - Rationale: there is NO engine event for "vehicle assigned" or
   "line color changed" (verified: 0 hits in 1443 base-game script files),
-  so convergence happens at the next arrival event per vehicle. This is
-  accepted behavior, not a gap to be patched with polling.
+  so the GUI hook is the trigger; arrival events cannot act (see below).
+- COMMANDS ARE FORBIDDEN DURING ENGINE EVENTS (verified in-game, build
+  40408): `api.cmd.sendCommand` from the `OnArriveAtStop` /
+  `OnCargoLoaded` / `OnCargoUnloaded` branch raises
+  `Engine.cpp:545 BeginModification: Assertion '!m_betweenChanges'
+  failed` — a fatal error per call, each writing a stack trace to the log.
+  With 1277 vehicles this made the game stutter badly. Vanilla only sends
+  commands from `update()` or from SCRIPTING events
+  (`finance/loan.script.tl` sends inside `handleEvent` only for
+  `id == "Loan"`; `celebrations.script.tl` likewise). Scripting events are
+  dispatched BETWEEN engine changes, so our own `recolor` event may send —
+  and does (color verified working from that branch).
+- Therefore engine events are OBSERVED, not acted on (capped log line).
+  Re-enabling an arrival fallback requires a legal carrier for the
+  command: either a queued flush in `update()` (Rule 0 amendment needed)
+  or nothing at all.
 - Rejected approaches (do NOT reintroduce): per-tick/per-N-tick sweeps,
   `os.clock` throttles, revision caches for sweeps, `guiUpdate` polling.
 
@@ -116,10 +130,14 @@ without manual repainting.
 - Manual vehicle colors are overwritten: line color always wins
   (enforced at the next event, manual `setColor` commands are never
   fought synchronously).
-- Trigger must be assignment/purchase-time, NOT arrival: the correct
-  color has to be visible immediately after buy+assign (also the only
-  way to test it). Arrival recolor stays as fallback for script-driven
-  and multiplayer-propagated changes.
+- Trigger is assignment/purchase-time (GUI hook -> scripting event),
+  NOT arrival: the correct color has to be visible immediately after
+  buy+assign. Verified working 2026-10-07: the tram takes the line color
+  right after buy+assign, and a line color change recolors the fleet.
+- The arrival fallback is DISABLED (2026-10-07): commands are illegal
+  during engine events (fatal assertion + stutter). Re-enabling it needs
+  a decision: queued flush in `update()` (Rule 0 amendment) vs. dropping
+  the fallback entirely.
 - Reverse rule (user, 2026-10-07, pending test of forward direction):
   if ALL vehicles on a line share one color, adopt it as the line
   color (vehicles -> line). Unanimity required; mixed colors change

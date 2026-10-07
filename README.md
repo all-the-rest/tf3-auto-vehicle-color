@@ -23,9 +23,14 @@ Two triggers, zero polling:
    vehicle(s) are recolored immediately — visible right after buy+assign.
    Commands are never blocked, only observed; without a success callback
    nothing happens (arrival fallback covers it).
-2. **Arrival fallback (engine script)** — `TransportVehicleSystem` /
-   `OnArriveAtStop` (+ cargo events) recolor one vehicle via `syncOne`.
-   Covers script-driven and multiplayer-propagated changes.
+2. **Arrival events (engine script)** — `TransportVehicleSystem` /
+   `OnArriveAtStop` (+ cargo events) are **observed only**. Sending a
+   command while an engine event is dispatched is illegal
+   (`BeginModification: Assertion '!m_betweenChanges' failed`, a fatal
+   error per call — with 1277 vehicles that made the game stutter), and
+   vanilla only sends commands from `update()` or from scripting events.
+   The fallback therefore needs a legal carrier before it can come back
+   (see AGENTS.md decisions).
 
 Both paths read current engine state and act only on a color mismatch.
 A vehicle that has never been painted has no `COLOR` component yet, so it
@@ -95,12 +100,10 @@ Unverified in the live game and marked as such:
 1. ~~Install the mod folder as a TF3 mod, start a save.~~ **verified**
    2026-10-07: `Creating entity for GameScript`, `engine script
    subscribed` (all sim pools), `getEntityForGameScript(...) = 342266`.
-2. Buy + assign a vehicle → correct line color immediately. (Trams are
-   the test vehicle; the tram is still in the depot at that moment.)
-3. Change the line color → vehicles follow immediately. **open**: the
-   hook's `makeEntitySetColorCmd` notification arrives, but the follow-up
-   logged nothing yet — the reason logging added on 2026-10-07 will name
-   it (`syncEntity -> 0/… (…)`).
+2. ~~Buy + assign a vehicle → correct line color immediately.~~
+   **verified** 2026-10-07 (tram, still in the depot at that moment).
+3. ~~Change the line color → vehicles follow immediately.~~ **verified**
+   2026-10-07 (`syncEntity` on the line entity, fleet recolored).
 4. Arrival fallback: script-driven changes converge at next stop.
 5. Open the console (`debugPrint`) if behavior differs; likely suspects:
    `TransportVehicle.depot` convention, factory-wrap visibility of
