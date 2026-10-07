@@ -60,6 +60,17 @@ helpers.
 
 ## In-game verification (still needed)
 
+Install (manual, mirrors `mods/release/urbangames_sandbox` layout):
+
+```sh
+cp -r . "/Users/florianreisinger/Library/Application Support/Steam/steamapps/common/Transport Fever 3/mods/alltherest_auto_vehicle_color"
+```
+
+Then: enable debug mode (`debugMode = true` in
+`Steam/userdata/84701780/3493540/local/settings.lua`, or game settings →
+advanced), activate the mod for a save, open the console with `^`/`§`/`
+(below ESC) — it mirrors `stdout.txt` and runs Lua one-liners.
+
 Unverified in the live game and marked as such:
 
 1. Install the mod folder as a TF3 mod, start a save.
