@@ -33,10 +33,15 @@ dort, damit der nächste Agent den alten Stand nicht für gültig hält).
 
 ## Offen
 
-- [ ] Einzelner Farbeimer im Fahrzeugfenster
-      (`vehicle_eow.script.tl:150`, callback-los) wird bewusst NICHT
-      beobachtet — manuelles Färben wird nicht synchron angekämpft
-      (geltende Regel). Nur falls der User das ändern will.
+- [ ] TODO: Einzel-Farbeimer im Fahrzeugfenster
+      (`gui/entity_window/vehicle/vehicle_eow.script.tl:150`) ebenfalls
+      beobachten? Der Command ist callback-los, der Hook sieht ihn
+      deshalb nicht. Geltende Regel ist „manuelles Färben wird nicht
+      synchron angekämpft" — der Eimer würde die Linienfarbe sofort
+      zurücksetzen. Zu entscheiden (user), dann ggf.
+      `makeEntitySetColorCmd` in `watch.CALLBACKLESS` aufnehmen, analog
+      zum Replace (Loop-Sicherheit bleibt: Notify-Commands sind nicht
+      watched und callback-los).
 
 ## Verworfen
 
