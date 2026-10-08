@@ -287,6 +287,10 @@ do
   check("watch replace prefers result", #t == 1 and t[1].vehicle == 200 and t[1].line == nil)
   t = watch.extractTargets("makeVehicleReplaceCmd", { [1] = 100, n = 2 }, {})
   check("watch replace falls back to args", #t == 1 and t[1].vehicle == 100)
+  -- The game sends the replace command WITHOUT a callback, so extractTargets
+  -- is also called with a nil result (see watch.CALLBACKLESS).
+  t = watch.extractTargets("makeVehicleReplaceCmd", { [1] = 100, n = 2 }, nil)
+  check("watch replace with nil result", #t == 1 and t[1].vehicle == 100)
 
   t = watch.extractTargets("makeVehicleBuyCmd", { n = 3 }, { resultVehicleEntity = 300 })
   check("watch buy", #t == 1 and t[1].vehicle == 300 and t[1].line == nil)
@@ -308,6 +312,12 @@ do
     and watch.WATCHED.makeLineUpdateCmd == true
     and watch.WATCHED.makeEntitySetColorCmd == true
     and (watch.WATCHED.makeTownCreateCmd or false) == false)
+
+  -- CALLBACKLESS: only the replace command gets our own success callback;
+  -- the single-vehicle paint bucket must stay pass-through (AGENTS.md).
+  check("watch CALLBACKLESS set", watch.CALLBACKLESS.makeVehicleReplaceCmd == true
+    and (watch.CALLBACKLESS.makeEntitySetColorCmd or false) == false
+    and (watch.CALLBACKLESS.makeVehicleBuyCmd or false) == false)
 end
 
 -- sync.lua: line-wide + entity-classified recolor (engine side)

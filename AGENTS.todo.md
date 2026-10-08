@@ -20,10 +20,23 @@ dort, damit der nächste Agent den alten Stand nicht für gültig hält).
 - [x] Einmalige Korrektur beim Session-Start (verifiziert: 1277/1277
       Fahrzeuge, 224 Linien), Marker im geteilten Script-State.
 - [x] Keine stillen No-ops: jeder Fall nennt einen Grund.
+- [x] Fahrzeugtausch wird beobachtet: `watch.CALLBACKLESS =
+      { makeVehicleReplaceCmd = true }` (user-Entscheid 2026-10-08). Die
+      Vanilla-GUI schickt den Replace callback-los
+      (`vehicle_react_util.tl:407`), der Hook hängt nur dafür seinen
+      eigenen Erfolgs-Callback an.
+- [x] Fahrzeugtausch im Spiel gemessen (2026-10-08, Save 1 mit aktiver
+      Mod): 52× `committed: makeVehicleReplaceCmd`, 52× Notify, 52×
+      `recolored 1/1 via entity …` (`recolored-first-time`), 0 Fehlschläge,
+      0 Assertions. Der Replace setzt die Color-Komponente zurück — genau
+      der Fall, für den der Recolor da ist.
 
 ## Offen
 
-- (nichts)
+- [ ] Einzelner Farbeimer im Fahrzeugfenster
+      (`vehicle_eow.script.tl:150`, callback-los) wird bewusst NICHT
+      beobachtet — manuelles Färben wird nicht synchron angekämpft
+      (geltende Regel). Nur falls der User das ändern will.
 
 ## Verworfen
 

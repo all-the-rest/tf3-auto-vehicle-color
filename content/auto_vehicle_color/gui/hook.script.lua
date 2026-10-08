@@ -3,7 +3,10 @@
 -- recipe): wraps api.cmd factories + sendCommand (technique proven by
 -- TPF3MP's guard.lua) and notifies the engine script after watched
 -- commands commit successfully. No ticks, no polling, commands are never
--- blocked or altered, only observed.
+-- blocked or altered, only observed. Commands the game sends
+-- fire-and-forget but that we must see anyway (the replace command) are
+-- listed in watch.CALLBACKLESS and get OUR success callback attached --
+-- still observe-only, our own notify commands still carry no callback.
 --
 -- The GUI recipe state cannot read components (lazy enum proxies), so
 -- the hook performs ZERO engine reads: it forwards { vehicle, line } /
@@ -93,9 +96,15 @@ function data()
     cmd.sendCommand = function(command, callback, ...)
       local kind = kinds[command]
       -- Pass through untouched: unknown, unwatched, or callback-less.
-      -- Our notify events carry no callback and pass through as well,
-      -- so they can never re-enter notify: loop-safe by construction.
-      if kind == nil or not watch.WATCHED[kind] or type(callback) ~= "function" then
+      -- Exception: a watched command in watch.CALLBACKLESS (the replace
+      -- command) is sent fire-and-forget by the game, so we attach our own
+      -- success callback -- otherwise it could never be observed at all.
+      -- Our notify events carry no callback and are not watched, so they
+      -- always pass through: loop-safe by construction.
+      if kind == nil or not watch.WATCHED[kind] then
+        return origSend(command, callback, ...)
+      end
+      if type(callback) ~= "function" and not watch.CALLBACKLESS[kind] then
         return origSend(command, callback, ...)
       end
       local args = calls[command]
@@ -117,7 +126,7 @@ function data()
         else
           log("failed (ignored): ", kind)
         end
-        return inner(result, success, ...)
+        if inner then return inner(result, success, ...) end
       end
       return origSend(command, callback, ...)
     end

@@ -54,10 +54,15 @@ without manual repainting.
   `api.cmd` factories (`^make.+Cmd$`, records kind+args per command
   object) and `sendCommand` — technique copied from TPF3MP `guard.lua`.
 - Commands are NEVER blocked/altered, only observed. Follow-ups fire
-  ONLY from a success callback; callback-less commands pass through
-  (arrival fallback covers them).
+  ONLY from a success callback. Commands the game sends callback-less
+  pass through UNCHANGED — with ONE exception: the names listed in
+  `gui/watch.lua` `CALLBACKLESS` get the hook's own success callback
+  attached, because the game sends them fire-and-forget and they would
+  otherwise never be observed (user decision, 2026-10-08: only
+  `makeVehicleReplaceCmd`).
 - Loop safety by construction: follow-ups are sent WITHOUT callback and
-  callback-less commands pass through, so they can never re-enter.
+  are NOT watched commands, so they always pass through untouched and can
+  never re-enter.
 - Install once (module-load/first-recipe guard); recipe renders nothing.
 - Pure decision logic lives in `gui/watch.lua` (`extractTargets`) and
   MUST stay headless-testable like `sync.lua`.
@@ -127,6 +132,24 @@ without manual repainting.
   `handleEvent(src, id, name, param)` in `data()`.
 - Invented, non-existent event names (0 hits): `line.changed`,
   `api.cmd.LineModify`, `vehicle.changed`, `api.cmd.SetLine`.
+- WHICH GUI COMMANDS CARRY A CALLBACK (read from the shipped `gui.zip`,
+  build 40408) decides what the hook can observe:
+  - callback-LESS (fire-and-forget), so the hook must attach its own:
+    `makeVehicleReplaceCmd` (`gui/line_vehicle_mgmt/vehicle_react_util.tl:407`,
+    the line manager's "Replace vehicles" mode via `HandleVehicleChanges`,
+    called at `manager_window.tl:8549`) and the single-vehicle paint bucket
+    `makeEntitySetColorCmd` (`gui/entity_window/vehicle/vehicle_eow.script.tl:150`).
+  - WITH callback (observed as-is): `makeVehicleBuyCmd` +
+    `makeVehicleSetLineCmd` (`vehicle_react_util.tl:350`/`:376`),
+    `makeVehicleSetLineCmd` in the manager (`manager_window.tl:4752`),
+    `makeLineCreateCmd`/`makeLineUpdateCmd` (`manager_window.tl:6537`/`:6558`),
+    the manager's multi-vehicle paint (`manager_window.tl:5072`).
+  - Also with callback: everything sent through
+    `engine_react_util.useStepState`/`useStepStateMulti`, because those
+    ALWAYS pass a wrapper function (`gui/main/engine_react_util.tl:37-54`) —
+    that is why the line colour pickers (`line.tl:84`,
+    `line_react_util.tl:597`) are observed even though their own
+    result handler is nil.
 
 ## Decisions (user, 2026-10-07)
 
@@ -140,6 +163,13 @@ without manual repainting.
 - Manual vehicle colors are overwritten: line color always wins
   (enforced at the next event, manual `setColor` commands are never
   fought synchronously).
+- Replace (user decision, 2026-10-08): the line manager's "Replace
+  vehicles" mode must recolor too. Measured gap: the game sends
+  `makeVehicleReplaceCmd` WITHOUT a callback, so the hook never saw it
+  (log: `hook installed`, replace performed, zero `committed:` lines).
+  Fix: `watch.CALLBACKLESS = { makeVehicleReplaceCmd = true }` — only this
+  one command gets the hook's own success callback. The single-vehicle
+  paint bucket stays callback-less/pass-through on purpose (see above).
 - Trigger is assignment/purchase-time (GUI hook -> scripting event),
   NOT arrival: the correct color has to be visible immediately after
   buy+assign. Verified working 2026-10-07: the tram takes the line color
