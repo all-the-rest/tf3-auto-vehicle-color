@@ -30,6 +30,12 @@ dort, damit der nächste Agent den alten Stand nicht für gültig hält).
       `recolored 1/1 via entity …` (`recolored-first-time`), 0 Fehlschläge,
       0 Assertions. Der Replace setzt die Color-Komponente zurück — genau
       der Fall, für den der Recolor da ist.
+- [x] Release: Revision 2 + In-Game-Mod-Hub-Upload erledigt (neues Modfile
+      8298299, Changelog „Vehicle replacement now works", Seite „Last
+      updated" aktualisiert), Git-Tag/Release `2`. Die mod.io-Modfile-
+      **Version bleibt 1.0**: die Mod-Hub sendet keine Version, alle
+      TF3-Mods (auch die offiziellen) stehen auf 1.0. Echte Version =
+      `mod.json` `revision` (2). user-Entscheid 2026-10-08: so lassen.
 
 ## Offen
 

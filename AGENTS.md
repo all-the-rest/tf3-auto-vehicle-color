@@ -150,6 +150,17 @@ without manual repainting.
     that is why the line colour pickers (`line.tl:84`,
     `line_react_util.tl:597`) are observed even though their own
     result handler is nil.
+- Mod Hub -> mod.io (measured 2026-10-08, mod 6434391): the in-game upload
+  sends NO version string — the uploaded metadata is only `buildVersion`,
+  `level`, `modType`, `uploadedFromPlatform`. So mod.io keeps its default
+  modfile `version = "1.0"`, and EVERY TF3 mod in the local mod.io cache
+  shows 1.0, official Urban Games mods included. That field is therefore
+  NOT the mod's version: the real version is `mod.json` `revision` (logged
+  as `runtimeRevision`, used by the game for update detection). A new
+  upload creates a new modfile (new `id`, new `date_added`, `changelog`)
+  and the page's "Last updated" changes; the 1.0 stays. Decision (user,
+  2026-10-08): leave it — changing the modfile version needs the mod.io
+  REST API (`edit-modfile`), not the in-game Mod Hub.
 
 ## Decisions (user, 2026-10-07)
 
