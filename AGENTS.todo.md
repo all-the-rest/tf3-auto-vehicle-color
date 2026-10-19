@@ -1,41 +1,8 @@
 # AGENTS.todo.md — tf3-auto-vehicle-color
 
-Kurzes Protokoll der Entscheidungen und ihres Stands. `[x]` umgesetzt,
-`[ ]` offen. „Verworfen" = nicht wieder einführen (die Begründung steht
-dort, damit der nächste Agent den alten Stand nicht für gültig hält).
-
-## Umgesetzt
-
-- [x] Streng ereignisgetrieben, kein Polling (Rule 0): `update()` enthält
-      nur die Subscription und die Einmal-Korrektur.
-- [x] GUI-Hook beobachtet `api.cmd` (observe-only, Loop-sicher): Kauf,
-      Zuweisung, Linienfarbe, Fahrzeugtausch.
-- [x] GUI → Engine über `makeScriptingSendEventCmd`; der **Event-Name**
-      muss abonniert sein (`events.lua` als einzige Quelle für id + Name).
-- [x] `ComponentType`-Namen UPPER_SNAKE (`COLOR`, `TRANSPORT_VEHICLE`,
-      `LINE`), abgesichert durch `sync.resolveComponentTypes`.
-- [x] Depot-Fahrzeuge werden mitgefärbt (sonst nie „sofort nach Kauf").
-- [x] Erstmaliges Färben, wenn das Fahrzeug noch keine Color-Komponente hat.
-- [x] Kein Command während Engine-Events (sonst Fatal-Assertion + Stutter).
-- [x] Einmalige Korrektur beim Session-Start (verifiziert: 1277/1277
-      Fahrzeuge, 224 Linien), Marker im geteilten Script-State.
-- [x] Keine stillen No-ops: jeder Fall nennt einen Grund.
-- [x] Fahrzeugtausch wird beobachtet: `watch.CALLBACKLESS =
-      { makeVehicleReplaceCmd = true }` (user-Entscheid 2026-10-08). Die
-      Vanilla-GUI schickt den Replace callback-los
-      (`vehicle_react_util.tl:407`), der Hook hängt nur dafür seinen
-      eigenen Erfolgs-Callback an.
-- [x] Fahrzeugtausch im Spiel gemessen (2026-10-08, Save 1 mit aktiver
-      Mod): 52× `committed: makeVehicleReplaceCmd`, 52× Notify, 52×
-      `recolored 1/1 via entity …` (`recolored-first-time`), 0 Fehlschläge,
-      0 Assertions. Der Replace setzt die Color-Komponente zurück — genau
-      der Fall, für den der Recolor da ist.
-- [x] Release: Revision 2 + In-Game-Mod-Hub-Upload erledigt (neues Modfile
-      8298299, Changelog „Vehicle replacement now works", Seite „Last
-      updated" aktualisiert), Git-Tag/Release `2`. Die mod.io-Modfile-
-      **Version bleibt 1.0**: die Mod-Hub sendet keine Version, alle
-      TF3-Mods (auch die offiziellen) stehen auf 1.0. Echte Version =
-      `mod.json` `revision` (2). user-Entscheid 2026-10-08: so lassen.
+Protokoll der **offenen** Arbeit. Erledigtes wird gelöscht (Historie in
+Git). „Verworfen" = nicht wieder einführen (die Begründung steht dort,
+damit der nächste Agent den alten Stand nicht für gültig hält).
 
 ## Offen
 
